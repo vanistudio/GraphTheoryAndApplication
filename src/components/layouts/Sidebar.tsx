@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/sidebar";
 import { LocationIcon, HistoryIcon, GearIcon, LogOutIcon } from "@/components/icons/glass-icons";
 
+const customButtonShadow = "shadow-[0px_32px_64px_-16px_#0000004c,0px_16px_32px_-8px_#0000004c,0px_8px_16px_-4px_#0000003d,0px_4px_8px_-2px_#0000003d,0px_-8px_16px_-1px_#00000029,0px_2px_4px_-1px_#0000003d,0px_0px_0px_1px_#000000,inset_0px_0px_0px_1px_#ffffff14,inset_0px_1px_0px_#ffffff33]";
+
 const navigation = [
   { name: "Bản đồ", href: "/", icon: LocationIcon },
   { name: "Lịch sử", href: "/history", icon: HistoryIcon },
@@ -49,7 +51,11 @@ export default function SidebarContent() {
                 const isActive = pathname === item.href;
                 return (
                   <SidebarMenuItem key={item.name}>
-                    <SidebarMenuButton asChild isActive={isActive}>
+                    <SidebarMenuButton 
+                      asChild 
+                      isActive={isActive} 
+                      className={`transition-all duration-200 ease-in-out ${isActive ? "custom-shadow" : ""}`}
+                    >
                       <Link href={item.href}>
                         <item.icon className="h-4 w-4" size={16} />
                         <span>{item.name}</span>
@@ -72,8 +78,8 @@ export default function SidebarContent() {
             </div>
             <Button
               onClick={() => authClient.signOut()}
-              variant="ghost"
-              className="w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left h-8 border border-dashed bg-background shadow-[0_0_0_1px_hsl(var(--border))] hover:bg-accent hover:text-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--accent))] text-xs justify-center"
+              variant="outline"
+              className={`w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left h-8 border border-dashed bg-background text-xs justify-center transition-all duration-200 ease-in-out ${customButtonShadow}`}
             >
               <LogOutIcon className="h-4 w-4" size={16} />
               Đăng xuất
@@ -82,8 +88,8 @@ export default function SidebarContent() {
         ) : (
           <Link href="/login">
             <Button
-              variant="ghost"
-              className="w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left h-8 border border-dashed bg-background shadow-[0_0_0_1px_hsl(var(--border))] hover:bg-accent hover:text-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--accent))] text-xs justify-center"
+              variant="outline"
+              className={`w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left h-8 border border-dashed bg-background text-xs justify-center transition-all duration-200 ease-in-out ${customButtonShadow}`}
             >
               Đăng nhập
             </Button>

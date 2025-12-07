@@ -7,78 +7,37 @@ import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
 import betterFetch from "@/lib/better-fetch";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { GraphNode, GraphEdge } from "@/components/contents/GraphView";
 
-const MapView = dynamic(() => import("@/components/contents/MapView"), {
+const GraphView = dynamic(() => import("@/components/contents/GraphView"), {
   ssr: false,
   loading: () => (
     <div className="flex h-[calc(100vh-120px)] flex-col gap-4 border rounded-md">
       <div className="p-6 space-y-2 border-b">
         <Skeleton className="h-6 w-[200px]" />
-        <Skeleton className="h-4 w-[300px]" />
       </div>
-      <div className="flex-1 p-6 space-y-4">
-        <div className="space-y-2">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-        </div>
+      <div className="flex-1 p-6">
         <Skeleton className="h-[calc(100vh-300px)] w-full rounded-md" />
       </div>
     </div>
   ),
 });
 
-interface Location {
-  id: string;
-  label: string;
-  lat: number;
-  lng: number;
-}
-
-interface Edge {
-  id: string;
-  source: string;
-  target: string;
-  weight: number;
-  routeGeometry?: Array<[number, number]>;
-}
-
 export default function Home() {
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
-  const [routeName] = useState<string>("Tuyến đường mới");
+  const [nodes, setNodes] = useState<GraphNode[]>([]);
+  const [edges, setEdges] = useState<GraphEdge[]>([]);
+  const [graphName] = useState<string>("Đồ thị mới");
   const [highlightedPath, setHighlightedPath] = useState<string[]>([]);
   const [nodeColors, setNodeColors] = useState<Record<string, string>>({});
   const session = authClient.useSession();
 
-  const handleAddLocation = useCallback((label: string, lat: number, lng: number) => {
-    const newLocation: Location = {
-      id: `loc_${Date.now()}`,
-      label,
-      lat,
-      lng,
-    };
-    setLocations([...locations, newLocation]);
-    toast.success(`Đã thêm địa điểm: ${label}`);
-  }, [locations]);
+  const handleNodesChange = useCallback((newNodes: GraphNode[]) => {
+    setNodes(newNodes);
+  }, []);
 
-  const handleDeleteLocation = useCallback((id: string) => {
-    setLocations(locations.filter((loc) => loc.id !== id));
-  }, [locations]);
-
-  const handleEditLocation = useCallback((id: string) => {
-    const location = locations.find((loc) => loc.id === id);
-    if (location) {
-    }
-  }, [locations]);
-
-  const handleUpdateLocation = useCallback((id: string, lat: number, lng: number) => {
-    setLocations(
-      locations.map((loc) =>
-        loc.id === id ? { ...loc, lat, lng } : loc
-      )
-    );
-    toast.success("Đã cập nhật vị trí");
-  }, [locations]);
+  const handleEdgesChange = useCallback((newEdges: GraphEdge[]) => {
+    setEdges(newEdges);
+  }, []);
 
   const handleRunAlgorithm = useCallback(
     async (algorithm: string, sourceNode?: string, targetNode?: string) => {
@@ -87,94 +46,34 @@ export default function Home() {
         return;
       }
 
-      if (locations.length === 0) {
-        toast.warning("Vui lòng thêm ít nhất một địa điểm");
+      if (nodes.length === 0) {
+        toast.warning("Vui lòng thêm ít nhất một node vào đồ thị");
         return;
       }
 
-      const toastId = toast.loading("Đang tính toán khoảng cách theo đường xá...");
+      const toastId = toast.loading("Đang chạy thuật toán...");
 
       try {
-        const nodes = locations.map((loc) => ({
-          id: loc.id,
-          label: loc.label,
-          position: {
-            x: (loc.lng - 106.660172) * 1000,
-            y: (loc.lat - 10.762622) * 1000,
-          },
+        const graphNodes = nodes.map((node) => ({
+          id: node.id,
+          label: node.label,
+          position: { x: node.x, y: node.y },
         }));
 
-        const computedEdges: Edge[] = [];
-        const geometries: Record<string, Array<[number, number]>> = {};
-
-        toast.loading("Đang tính toán khoảng cách giữa các địa điểm...", { id: toastId });
-
-        for (let i = 0; i < locations.length; i++) {
-          for (let j = i + 1; j < locations.length; j++) {
-            const from = locations[i];
-            const to = locations[j];
-            const edgeId = `e_${from.id}_${to.id}`;
-
-            try {
-              const routeResponse = await betterFetch.post<{
-                distance: number;
-                duration: number;
-                geometry: {
-                  type: string;
-                  coordinates: Array<[number, number]>;
-                };
-              }>("/api/routing", {
-                from: [from.lng, from.lat],
-                to: [to.lng, to.lat],
-              });
-
-              if (routeResponse.data) {
-                const distance = routeResponse.data.distance;
-                const coords = routeResponse.data.geometry.coordinates.map(
-                  ([lng, lat]) => [lat, lng] as [number, number]
-                );
-
-                computedEdges.push({
-                  id: edgeId,
-                  source: from.id,
-                  target: to.id,
-                  weight: Math.round(distance),
-                  routeGeometry: coords,
-                });
-
-                geometries[edgeId] = coords;
-              }
-            } catch (error) {
-              console.error(`Failed to calculate route from ${from.label} to ${to.label}:`, error);
-              const fallbackDistance = Math.sqrt(
-                Math.pow(to.lat - from.lat, 2) + Math.pow(to.lng - from.lng, 2)
-              ) * 111000;
-              computedEdges.push({
-                id: edgeId,
-                source: from.id,
-                target: to.id,
-                weight: Math.round(fallbackDistance),
-              });
-            }
-          }
-        }
-
-        setEdges(computedEdges);
-
-        toast.loading("Đang chạy thuật toán...", { id: toastId });
+        const graphEdges = edges.map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          weight: edge.weight,
+          label: edge.label || String(edge.weight),
+        }));
 
         let graphId: string | null = null;
         try {
           const response = await betterFetch.post<{ graph: { _id: string } }>("/api/graphs", {
-            name: routeName,
-            nodes,
-            edges: computedEdges.map((e) => ({
-              id: e.id,
-              source: e.source,
-              target: e.target,
-              weight: e.weight,
-              label: e.weight.toString(),
-            })),
+            name: graphName,
+            nodes: graphNodes,
+            edges: graphEdges,
           });
           
           if (response.data?.graph?._id) {
@@ -257,46 +156,30 @@ export default function Home() {
         toast.error(errorMessage, { id: toastId });
       }
     },
-    [session, locations, routeName]
+    [session, nodes, edges, graphName]
   );
 
-  const mapNodes = locations.map((loc) => ({
-    id: loc.id,
-    type: "default" as const,
-    position: {
-      x: (loc.lng - 106.660172) * 1000,
-      y: (loc.lat - 10.762622) * 1000,
-    },
-    data: { label: loc.label },
-  }));
-
   return (
-    <div className="page">
-      <div className="grid h-full grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <MapView
-            nodes={mapNodes}
-            highlightedPath={highlightedPath}
-            nodeColors={nodeColors}
+    <div className="h-[calc(100vh-120px)] min-h-0 overflow-hidden">
+      <div className="flex flex-col lg:grid lg:grid-cols-4 h-full gap-2 lg:gap-4">
+        {/* 移动端：算法面板在顶部，桌面端：在左侧 */}
+        <div className="lg:col-span-1 order-2 lg:order-1 shrink-0 lg:shrink">
+          <AlgorithmPanel
+            nodes={nodes}
             edges={edges}
-            onNodeAdd={handleAddLocation}
-            onNodeUpdate={handleUpdateLocation}
-            onNodeDelete={handleDeleteLocation}
-            onNodeEdit={handleEditLocation}
+            onRunAlgorithm={handleRunAlgorithm}
           />
         </div>
 
-        <div className="lg:col-span-1">
-          <AlgorithmPanel
-            nodes={mapNodes}
-            edges={edges.map((e) => ({
-              id: e.id,
-              source: e.source,
-              target: e.target,
-              label: e.weight.toString(),
-              data: { weight: e.weight },
-            }))}
-            onRunAlgorithm={handleRunAlgorithm}
+        {/* 移动端：图编辑器在顶部（占据主要空间），桌面端：在右侧 */}
+        <div className="lg:col-span-3 order-1 lg:order-2 flex-1 min-h-0 overflow-hidden">
+          <GraphView
+            nodes={nodes}
+            edges={edges}
+            highlightedPath={highlightedPath}
+            nodeColors={nodeColors}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
           />
         </div>
       </div>
