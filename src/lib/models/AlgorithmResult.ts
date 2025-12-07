@@ -3,13 +3,20 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IAlgorithmResult extends Document {
   graphId: string;
   userId: string;
-  algorithm: "dijkstra" | "bellman-ford" | "kruskal" | "prim" | "graph-coloring";
+  algorithm: "dijkstra" | "bellman-ford" | "kruskal" | "prim" | "graph-coloring" | "connected-components" | "cycle-detection";
   result: {
     path?: string[];
     distance?: number;
     mst?: Array<{ source: string; target: string; weight: number }>;
     colors?: Record<string, number>;
     steps?: unknown[];
+    components?: Array<{ nodes: string[]; size: number }>;
+    isConnected?: boolean;
+    componentCount?: number;
+    cycles?: Array<{ nodes: string[]; edges: string[] }>;
+    hasCycle?: boolean;
+    cycleCount?: number;
+    distances?: Record<string, number>;
   };
   sourceNode?: string;
   targetNode?: string;
@@ -22,7 +29,7 @@ const AlgorithmResultSchema = new Schema<IAlgorithmResult>(
     userId: { type: String, required: true, index: true },
     algorithm: {
       type: String,
-      enum: ["dijkstra", "bellman-ford", "kruskal", "prim", "graph-coloring"],
+      enum: ["dijkstra", "bellman-ford", "kruskal", "prim", "graph-coloring", "connected-components", "cycle-detection"],
       required: true,
     },
     result: { type: Schema.Types.Mixed, required: true },

@@ -7,6 +7,8 @@ import { dijkstra } from "@/lib/algorithms/dijkstra";
 import { bellmanFord } from "@/lib/algorithms/bellman-ford";
 import { kruskal } from "@/lib/algorithms/kruskal";
 import { prim } from "@/lib/algorithms/prim";
+import { findConnectedComponents, isConnected } from "@/lib/algorithms/connected-components";
+import { detectCycles, hasCycle } from "@/lib/algorithms/cycle-detection";
 import Graph from "@/lib/models/Graph";
 
 export async function POST(request: NextRequest) {
@@ -38,14 +40,14 @@ export async function POST(request: NextRequest) {
         if (!sourceNode) {
           return NextResponse.json({ error: "Source node required" }, { status: 400 });
         }
-        result = dijkstra(graph.nodes, graph.edges, sourceNode, targetNode);
+        result = await dijkstra(graph.nodes, graph.edges, sourceNode, targetNode);
         break;
 
       case "bellman-ford":
         if (!sourceNode) {
           return NextResponse.json({ error: "Source node required" }, { status: 400 });
         }
-        result = bellmanFord(graph.nodes, graph.edges, sourceNode, targetNode);
+        result = await bellmanFord(graph.nodes, graph.edges, sourceNode, targetNode);
         break;
 
       case "kruskal":
@@ -54,6 +56,22 @@ export async function POST(request: NextRequest) {
 
       case "prim":
         result = prim(graph.nodes, graph.edges);
+        break;
+
+      case "connected-components":
+        result = {
+          components: findConnectedComponents(graph.nodes, graph.edges),
+          isConnected: isConnected(graph.nodes, graph.edges),
+          componentCount: findConnectedComponents(graph.nodes, graph.edges).length,
+        };
+        break;
+
+      case "cycle-detection":
+        result = {
+          cycles: detectCycles(graph.nodes, graph.edges),
+          hasCycle: hasCycle(graph.nodes, graph.edges),
+          cycleCount: detectCycles(graph.nodes, graph.edges).length,
+        };
         break;
 
       default:

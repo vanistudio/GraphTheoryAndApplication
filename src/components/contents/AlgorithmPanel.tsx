@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { Info, Play, Zap, Network, Link2 } from "lucide-react";
 import type { GraphNode, GraphEdge } from "@/components/contents/GraphView";
 
-type Algorithm = "dijkstra" | "bellman-ford" | "kruskal" | "prim";
+type Algorithm = "dijkstra" | "bellman-ford" | "kruskal" | "prim" | "connected-components" | "cycle-detection";
 
 const customButtonShadow =
   "shadow-[0px_32px_64px_-16px_#0000004c,0px_16px_32px_-8px_#0000004c,0px_8px_16px_-4px_#0000003d,0px_4px_8px_-2px_#0000003d,0px_-8px_16px_-1px_#00000029,0px_2px_4px_-1px_#0000003d,0px_0px_0px_1px_#000000,inset_0px_0px_0px_1px_#ffffff14,inset_0px_1px_0px_#ffffff33]";
@@ -58,6 +58,16 @@ const algorithmInfo: Record<
     name: "Prim",
     description: "Tìm cây khung nhỏ nhất (Minimum Spanning Tree)",
     complexity: "O(E log V)",
+  },
+  "connected-components": {
+    name: "Thành phần liên thông",
+    description: "Tìm tất cả các thành phần liên thông trong đồ thị",
+    complexity: "O(V + E)",
+  },
+  "cycle-detection": {
+    name: "Phát hiện chu trình",
+    description: "Tìm tất cả các chu trình trong đồ thị",
+    complexity: "O(V + E)",
   },
 };
 
@@ -110,6 +120,11 @@ export default function AlgorithmPanel({
           return;
         }
         await onRunAlgorithm(selectedAlgorithm);
+      } else if (
+        selectedAlgorithm === "connected-components" ||
+        selectedAlgorithm === "cycle-detection"
+      ) {
+        await onRunAlgorithm(selectedAlgorithm);
       }
     } catch (error) {
       console.error("Error running algorithm:", error);
@@ -127,7 +142,9 @@ export default function AlgorithmPanel({
     nodes.length > 0 &&
     (selectedAlgorithm === "dijkstra" || selectedAlgorithm === "bellman-ford"
       ? sourceNode !== ""
-      : edges.length > 0);
+      : selectedAlgorithm === "kruskal" || selectedAlgorithm === "prim"
+      ? edges.length > 0
+      : true);
 
   return (
     <Card
@@ -198,6 +215,12 @@ export default function AlgorithmPanel({
                 Kruskal (Cây khung nhỏ nhất)
               </SelectItem>
               <SelectItem value="prim">Prim (Cây khung nhỏ nhất)</SelectItem>
+              <SelectItem value="connected-components">
+                Thành phần liên thông
+              </SelectItem>
+              <SelectItem value="cycle-detection">
+                Phát hiện chu trình
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -281,6 +304,18 @@ export default function AlgorithmPanel({
               </Alert>
             </>
           )}
+        {(selectedAlgorithm === "connected-components" ||
+          selectedAlgorithm === "cycle-detection") && (
+          <>
+            <Separator />
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                Thuật toán này sẽ phân tích toàn bộ đồ thị và hiển thị kết quả
+              </AlertDescription>
+            </Alert>
+          </>
+        )}
 
         <Separator />
 

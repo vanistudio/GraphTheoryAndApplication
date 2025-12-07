@@ -108,6 +108,8 @@ export default function Home() {
           "bellman-ford": "Bellman-Ford",
           kruskal: "Kruskal",
           prim: "Prim",
+          "connected-components": "Thành phần liên thông",
+          "cycle-detection": "Phát hiện chu trình",
         };
 
         toast.success(
@@ -141,6 +143,45 @@ export default function Home() {
             } else {
               setHighlightedPath([]);
               setNodeColors({});
+            }
+          } else if ("components" in result && Array.isArray(result.components)) {
+            const allComponentNodes: string[] = [];
+            (result.components as Array<{ nodes: string[] }>).forEach((comp) => {
+              allComponentNodes.push(...comp.nodes);
+            });
+            if (allComponentNodes.length > 0) {
+              setHighlightedPath(allComponentNodes);
+              const colors: Record<string, string> = {};
+              const colorPalette = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
+              (result.components as Array<{ nodes: string[] }>).forEach((comp, idx) => {
+                const color = colorPalette[idx % colorPalette.length];
+                comp.nodes.forEach((nodeId) => {
+                  colors[nodeId] = color;
+                });
+              });
+              setNodeColors(colors);
+              toast.info(
+                `Tìm thấy ${result.componentCount} thành phần liên thông. Đồ thị ${result.isConnected ? "liên thông" : "không liên thông"}.`
+              );
+            } else {
+              setHighlightedPath([]);
+              setNodeColors({});
+            }
+          } else if ("cycles" in result && Array.isArray(result.cycles)) {
+            const allCycleNodes: string[] = [];
+            (result.cycles as Array<{ nodes: string[] }>).forEach((cycle) => {
+              allCycleNodes.push(...cycle.nodes);
+            });
+            if (allCycleNodes.length > 0) {
+              setHighlightedPath(Array.from(new Set(allCycleNodes)));
+              setNodeColors({});
+              toast.info(
+                `Tìm thấy ${result.cycleCount} chu trình trong đồ thị.`
+              );
+            } else {
+              setHighlightedPath([]);
+              setNodeColors({});
+              toast.info("Đồ thị không có chu trình.");
             }
           } else {
             setHighlightedPath([]);

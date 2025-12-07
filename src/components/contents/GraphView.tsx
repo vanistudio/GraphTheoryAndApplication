@@ -42,8 +42,11 @@ import {
   ZoomOut,
   Maximize2,
   Edit,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
+import { analyzeGraph } from "@/lib/algorithms/graph-analysis";
+import { Icon } from "@iconify/react";
 
 export interface GraphNode {
   id: string;
@@ -98,6 +101,7 @@ export default function GraphView({
   const [matrixData, setMatrixData] = useState<(number | string)[][]>([[""]]);
   const [matrixSize, setMatrixSize] = useState<number>(1);
   const [matrixDialogOpen, setMatrixDialogOpen] = useState(false);
+  const [graphDetailsDialogOpen, setGraphDetailsDialogOpen] = useState(false);
   const inputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
 
   const [draggingNode, setDraggingNode] = useState<string | null>(null);
@@ -447,10 +451,10 @@ export default function GraphView({
       for (let i = 0; i < n; i++) {
         for (let j = 0; j < n; j++) {
           const weight = matrix[i][j];
-          if (weight > 0 && i !== j) {
+          if (weight !== 0 && !isNaN(weight) && i !== j) {
             const edgeId = `edge_${i}_${j}`;
             const existingEdge = newEdges.find(
-              (e) =>
+            (e) =>
                 (e.source === newNodes[i].id && e.target === newNodes[j].id) ||
                 (e.source === newNodes[j].id && e.target === newNodes[i].id)
             );
@@ -490,7 +494,7 @@ export default function GraphView({
           if (i < matrixData.length && j < (matrixData[i]?.length || 0)) {
             const val = matrixData[i][j];
             row.push(typeof val === "number" ? String(val) : val);
-          } else {
+      } else {
             row.push("");
           }
         }
@@ -609,8 +613,8 @@ export default function GraphView({
     }
 
     const weight = parseFloat(newEdgeWeight);
-    if (isNaN(weight) || weight < 0) {
-      toast.error("Trọng số phải là số dương");
+    if (isNaN(weight)) {
+      toast.error("Trọng số phải là một số hợp lệ");
       return;
     }
 
@@ -638,14 +642,14 @@ export default function GraphView({
     }
 
     const weight = parseFloat(edgeWeight);
-    if (isNaN(weight) || weight < 0) {
-      toast.error("Trọng số phải là số dương");
+    if (isNaN(weight)) {
+      toast.error("Trọng số phải là một số hợp lệ");
       return;
     }
-
+    
     if (isEditingEdge && selectedEdge) {
       const newEdges = edges.map((e) =>
-        e.id === selectedEdge.id
+          e.id === selectedEdge.id
           ? { ...e, weight, label: weight.toString() }
           : e
       );
@@ -668,7 +672,7 @@ export default function GraphView({
       setSourceNodeId("");
       setTargetNodeId("");
     }
-
+    
     setEdgeWeight("1");
     setEdgeWeightDialogOpen(false);
     setSelectedEdge(null);
@@ -749,12 +753,12 @@ export default function GraphView({
               <Network className="h-4 w-4 lg:h-5 lg:w-5 shrink-0" />
               <div className="min-w-0">
                 <CardTitle className="text-sm lg:text-lg truncate">
-                  Đồ thị
-                </CardTitle>
+                Đồ thị
+              </CardTitle>
                 <p className="text-xs text-muted-foreground mt-0.5 hidden lg:block">
                   Tạo và chỉnh sửa đồ thị
                 </p>
-              </div>
+            </div>
             </div>
             <div className="flex items-center gap-1 lg:gap-2 shrink-0">
               <Badge variant="outline" className="text-xs">
@@ -784,14 +788,14 @@ export default function GraphView({
             className="flex-1 relative border-r-0 lg:border-r border-border min-h-0 overflow-hidden"
             ref={containerRef}
           >
-            {nodes.length === 0 && (
+          {nodes.length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center z-10 bg-background/80">
-                <Alert className="max-w-md">
-                  <Info className="h-4 w-4" />
-                  <AlertDescription>
-                    Đồ thị trống. Hãy thêm đỉnh đầu tiên để bắt đầu.
-                  </AlertDescription>
-                </Alert>
+                <Alert className="max-w-xs">
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                    Đồ thị trống!
+              </AlertDescription>
+            </Alert>
               </div>
             )}
             <div className="h-full w-full relative overflow-hidden bg-background">
@@ -1042,12 +1046,12 @@ export default function GraphView({
                               fill={
                                 isHighlighted
                                   ? "#22c55e"
-                                  : "hsl(var(--background))"
+                                  : "#ffffff"
                               }
                               stroke={
                                 isHighlighted
                                   ? "#22c55e"
-                                  : "hsl(var(--background))"
+                                  : "#ffffff"
                               }
                               strokeWidth={isHighlighted ? 2 : 4}
                             />
@@ -1056,7 +1060,7 @@ export default function GraphView({
                               y={labelPos.y}
                               textAnchor="middle"
                               dominantBaseline="middle"
-                              fill={isHighlighted ? "#ffffff" : "#ffffff"}
+                              fill={isHighlighted ? "#ffffff" : "#000"}
                               fontSize={isHighlighted ? "14" : "13"}
                               fontWeight="700"
                               pointerEvents="none"
@@ -1143,6 +1147,20 @@ export default function GraphView({
                 </SheetHeader>
                 <div className="space-y-4 pt-2">
                   <div className="space-y-2">
+                    <Label className="text-sm font-medium">Xem chi tiết</Label>
+                    <Button
+                      variant="outline"
+                      onClick={() => setGraphDetailsDialogOpen(true)}
+                      disabled={nodes.length === 0}
+                      className={`w-full h-10 ${customButtonShadow}`}
+                      size="sm"
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      Xem chi tiết đồ thị
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label className="text-sm font-medium">Nhập ma trận</Label>
                     <Button
                       variant="outline"
@@ -1171,8 +1189,8 @@ export default function GraphView({
                         variant="outline"
                         className={`shrink-0 ${customButtonShadow}`}
                       >
-                        <Plus className="h-4 w-4" />
-                      </Button>
+                            <Plus className="h-4 w-4" />
+                          </Button>
                     </div>
                   </div>
 
@@ -1380,6 +1398,20 @@ export default function GraphView({
           {!isMobile && (
             <div className="w-72 border-l border-border p-4 space-y-4 overflow-y-auto">
               <div className="space-y-2">
+                <Label className="text-xs font-medium">Xem chi tiết</Label>
+                <Button
+                  variant="outline"
+                  onClick={() => setGraphDetailsDialogOpen(true)}
+                  disabled={nodes.length === 0}
+                  className={`w-full h-9 ${customButtonShadow}`}
+                  size="sm"
+                >
+                  <FileText className="h-3.5 w-3.5 mr-2" />
+                  Xem chi tiết đồ thị
+                </Button>
+              </div>
+
+              <div className="space-y-2">
                 <Label className="text-xs font-medium">Nhập ma trận</Label>
                 <Button
                   variant="outline"
@@ -1413,7 +1445,7 @@ export default function GraphView({
                 </div>
               </div>
 
-              <Separator />
+                      <Separator />
 
               <div className="space-y-3">
                 <Label className="text-xs font-medium">Tạo cạnh</Label>
@@ -1501,25 +1533,25 @@ export default function GraphView({
                   <Card
                     className={`p-3 border border-border ${customButtonShadow}`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
                         <p className="text-sm font-medium">
                           {selectedNode.label}
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           ID: {selectedNode.id}
-                        </p>
-                      </div>
-                      <Button
-                        onClick={deleteSelectedNode}
+                            </p>
+                          </div>
+                              <Button
+                                onClick={deleteSelectedNode}
                         variant="outline"
-                        size="icon"
+                                size="icon"
                         className={`h-7 w-7 ${customButtonShadow}`}
-                      >
+                              >
                         <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </Card>
+                              </Button>
+                        </div>
+                      </Card>
                 </div>
               )}
 
@@ -1542,7 +1574,7 @@ export default function GraphView({
                           <p className="text-xs text-muted-foreground mt-0.5">
                             Trọng số: {selectedEdge.weight}
                           </p>
-                        </div>
+                </div>
                         <Button
                           onClick={deleteSelectedEdge}
                           variant="outline"
@@ -1551,7 +1583,7 @@ export default function GraphView({
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
-                      </div>
+          </div>
                       <div className="flex gap-2">
                         <Input
                           type="number"
@@ -1587,7 +1619,7 @@ export default function GraphView({
                         >
                           <Edit className="h-3.5 w-3.5" />
                         </Button>
-                      </div>
+              </div>
                     </div>
                   </Card>
                 </div>
@@ -1603,9 +1635,9 @@ export default function GraphView({
                   <p>• Click vào cạnh để chỉnh sửa trọng số</p>
                   <p>• Kéo nền để di chuyển đồ thị</p>
                   <p>• Cuộn chuột để phóng to/thu nhỏ</p>
-                </div>
-              </div>
             </div>
+            </div>
+          </div>
           )}
         </CardContent>
       </Card>
@@ -1667,6 +1699,368 @@ export default function GraphView({
               className={customButtonShadow}
             >
               Xác nhận
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={graphDetailsDialogOpen}
+        onOpenChange={setGraphDetailsDialogOpen}
+      >
+        <DialogContent className={`max-w-[calc(100%-2rem)] sm:max-w-6xl max-h-[90vh] overflow-y-auto ${customButtonShadow}`}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Icon
+                icon="solar:document-text-bold-duotone"
+                className="h-5 w-5"
+              />
+              Chi tiết đồ thị
+            </DialogTitle>
+            <DialogDescription>
+              Thông tin chi tiết về đồ thị hiện tại
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 py-2">
+            {nodes.length === 0 ? (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  Đồ thị trống. Vui lòng thêm đỉnh và cạnh để xem chi tiết.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              (() => {
+                const graphInfo = analyzeGraph(nodes, edges);
+                return (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <Card className={`p-4 border ${customButtonShadow}`}>
+                        <CardHeader className="p-0 pb-3">
+                          <CardTitle className="text-base flex items-center gap-2">
+                            <Icon
+                              icon="solar:info-circle-bold-duotone"
+                              className="h-4 w-4"
+                            />
+                            Thông tin cơ bản
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0 space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">
+                                Loại đồ thị
+                              </div>
+                              <div className="text-sm font-semibold">
+                                {graphInfo.isDirected ? "Có hướng" : "Vô hướng"}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">
+                                Số đỉnh
+                              </div>
+                              <div className="text-sm font-semibold">
+                                {graphInfo.nodeCount}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">
+                                Số cạnh
+                              </div>
+                              <div className="text-sm font-semibold">
+                                {graphInfo.edgeCount}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">
+                                Có trọng số
+                              </div>
+                              <div className="text-sm font-semibold">
+                                {graphInfo.isWeighted ? "Có" : "Không"}
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card className={`p-4 border ${customButtonShadow}`}>
+                        <CardHeader className="p-0 pb-3">
+                          <CardTitle className="text-base flex items-center gap-2">
+                            <Icon
+                              icon="solar:graph-bold-duotone"
+                              className="h-4 w-4"
+                            />
+                            Tính chất đồ thị
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0 space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">
+                                Liên thông
+                              </div>
+                              <div className="text-sm font-semibold">
+                                {graphInfo.isConnected ? (
+                                  <span className="text-green-600">Có</span>
+                                ) : (
+                                  <span className="text-red-600">Không</span>
+                                )}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">
+                                Thành phần liên thông
+                              </div>
+                              <div className="text-sm font-semibold">
+                                {graphInfo.componentCount}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">
+                                Có chu trình
+                              </div>
+                              <div className="text-sm font-semibold">
+                                {graphInfo.hasCycles ? (
+                                  <span className="text-orange-600">
+                                    Có ({graphInfo.cycleCount})
+                                  </span>
+                                ) : (
+                                  <span className="text-green-600">Không</span>
+                                )}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">
+                                Đồ thị đầy đủ
+                              </div>
+                              <div className="text-sm font-semibold">
+                                {graphInfo.isComplete ? "Có" : "Không"}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">
+                                Đồ thị đều
+                              </div>
+                              <div className="text-sm font-semibold">
+                                {graphInfo.isRegular
+                                  ? `Có (bậc ${graphInfo.regularDegree})`
+                                  : "Không"}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-muted-foreground mb-1">
+                                Trọng số âm
+                              </div>
+                              <div className="text-sm font-semibold">
+                                {graphInfo.hasNegativeWeights ? (
+                                  <span className="text-orange-600">Có</span>
+                                ) : (
+                                  "Không"
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {graphInfo.isWeighted && (
+                      <>
+                        <Card className={`p-4 border ${customButtonShadow}`}>
+                          <CardHeader className="p-0 pb-3">
+                            <CardTitle className="text-base flex items-center gap-2">
+                              <Icon
+                                icon="solar:chart-bold-duotone"
+                                className="h-4 w-4"
+                              />
+                              Thống kê trọng số
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-0">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              <div>
+                                <div className="text-xs text-muted-foreground mb-1">
+                                  Trọng số nhỏ nhất
+                                </div>
+                                <div className="text-sm font-semibold">
+                                  {graphInfo.minWeight?.toFixed(2) || "N/A"}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-muted-foreground mb-1">
+                                  Trọng số lớn nhất
+                                </div>
+                                <div className="text-sm font-semibold">
+                                  {graphInfo.maxWeight?.toFixed(2) || "N/A"}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-muted-foreground mb-1">
+                                  Tổng trọng số
+                                </div>
+                                <div className="text-sm font-semibold">
+                                  {graphInfo.totalWeight.toFixed(2)}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-muted-foreground mb-1">
+                                  Trọng số trung bình
+                                </div>
+                                <div className="text-sm font-semibold">
+                                  {graphInfo.averageWeight.toFixed(2)}
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </>
+                    )}
+
+                    <Card className={`p-4 border ${customButtonShadow}`}>
+                      <CardHeader className="p-0 pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Icon
+                            icon="solar:users-group-rounded-bold-duotone"
+                            className="h-4 w-4"
+                          />
+                          Bậc của các đỉnh
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse">
+                            <thead>
+                              <tr className="border-b border-border">
+                                <th className="text-left p-2 text-xs font-semibold text-muted-foreground">
+                                  Đỉnh
+                                </th>
+                                {graphInfo.isDirected ? (
+                                  <>
+                                    <th className="text-center p-2 text-xs font-semibold text-muted-foreground">
+                                      Bậc vào
+                                    </th>
+                                    <th className="text-center p-2 text-xs font-semibold text-muted-foreground">
+                                      Bậc ra
+                                    </th>
+                                    <th className="text-center p-2 text-xs font-semibold text-muted-foreground">
+                                      Tổng bậc
+                                    </th>
+                                  </>
+                                ) : (
+                                  <th className="text-center p-2 text-xs font-semibold text-muted-foreground">
+                                    Bậc
+                                  </th>
+                                )}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {nodes.map((node) => {
+                                const degree = graphInfo.degrees[node.id] || 0;
+                                const inDegree = graphInfo.isDirected
+                                  ? graphInfo.inDegrees[node.id] || 0
+                                  : null;
+                                const outDegree = graphInfo.isDirected
+                                  ? graphInfo.outDegrees[node.id] || 0
+                                  : null;
+                                return (
+                                  <tr
+                                    key={node.id}
+                                    className="border-b border-border/50 hover:bg-muted/30"
+                                  >
+                                    <td className="p-2 text-sm font-medium">
+                                      {node.label}
+                                    </td>
+                                    {graphInfo.isDirected ? (
+                                      <>
+                                        <td className="p-2 text-sm text-center">
+                                          {inDegree}
+                                        </td>
+                                        <td className="p-2 text-sm text-center">
+                                          {outDegree}
+                                        </td>
+                                        <td className="p-2 text-sm text-center font-semibold">
+                                          {degree}
+                                        </td>
+                                      </>
+                                    ) : (
+                                      <td className="p-2 text-sm text-center font-semibold">
+                                        {degree}
+                                      </td>
+                                    )}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className={`p-4 border ${customButtonShadow}`}>
+                      <CardHeader className="p-0 pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Icon
+                            icon="solar:database-bold-duotone"
+                            className="h-4 w-4"
+                          />
+                          Ma trận kề
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        <div className="overflow-x-auto rounded-md border border-border">
+                          <table className="w-full border-collapse text-xs">
+                            <thead>
+                              <tr>
+                                <th className="border border-border p-2 bg-muted/50 font-semibold sticky left-0 z-10">
+                                  {" "}
+                                </th>
+                                {nodes.map((node) => (
+                                  <th
+                                    key={node.id}
+                                    className="border border-border p-2 bg-muted/50 text-center font-semibold min-w-[60px]"
+                                  >
+                                    {node.label}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {graphInfo.adjacencyMatrix.map((row, i) => (
+                                <tr key={i}>
+                                  <td className="border border-border p-2 bg-muted/50 text-center font-semibold sticky left-0 z-10">
+                                    {nodes[i]?.label}
+                                  </td>
+                                  {row.map((cell, j) => (
+                                    <td
+                                      key={j}
+                                      className={`border border-border p-2 text-center min-w-[60px] ${
+                                        cell !== 0
+                                          ? "bg-primary/10 font-semibold text-primary"
+                                          : "text-muted-foreground"
+                                      }`}
+                                    >
+                                      {cell === 0 ? "0" : cell.toFixed(1)}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                );
+              })()
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setGraphDetailsDialogOpen(false)}
+              className={customButtonShadow}
+            >
+              Đóng
             </Button>
           </DialogFooter>
         </DialogContent>

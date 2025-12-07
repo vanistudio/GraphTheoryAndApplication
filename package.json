@@ -5,12 +5,15 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:wasm": "node scripts/build-wasm.js prod",
+    "build:wasm:fast": "node scripts/build-wasm.js fast",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
     "@better-fetch/fetch": "^1.1.18",
     "@hookform/resolvers": "^5.2.2",
+    "@iconify/react": "^6.0.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.8",
