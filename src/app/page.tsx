@@ -7,6 +7,8 @@ import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
 import betterFetch from "@/lib/better-fetch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
+import { motion, AnimatePresence } from "framer-motion";
 import type { GraphNode, GraphEdge } from "@/components/contents/GraphView";
 
 const GraphView = dynamic(() => import("@/components/contents/GraphView"), {
@@ -29,6 +31,8 @@ export default function Home() {
   const [graphName] = useState<string>("Đồ thị mới");
   const [highlightedPath, setHighlightedPath] = useState<string[]>([]);
   const [nodeColors, setNodeColors] = useState<Record<string, string>>({});
+  const [algorithmProgress, setAlgorithmProgress] = useState<number>(0);
+  const [isRunningAlgorithm, setIsRunningAlgorithm] = useState<boolean>(false);
   const session = authClient.useSession();
 
   const handleNodesChange = useCallback((newNodes: GraphNode[]) => {
@@ -51,7 +55,21 @@ export default function Home() {
         return;
       }
 
+      setIsRunningAlgorithm(true);
+      setAlgorithmProgress(0);
       const toastId = toast.loading("Đang chạy thuật toán...");
+
+      // Simulate progress
+      let progressInterval: NodeJS.Timeout | null = null;
+      progressInterval = setInterval(() => {
+        setAlgorithmProgress((prev) => {
+          if (prev >= 90) {
+            if (progressInterval) clearInterval(progressInterval);
+            return prev;
+          }
+          return prev + 10;
+        });
+      }, 200);
 
       try {
         const graphNodes = nodes.map((node) => ({
@@ -80,12 +98,18 @@ export default function Home() {
             graphId = response.data.graph._id;
           }
         } catch (error) {
+          if (progressInterval) clearInterval(progressInterval);
+          setIsRunningAlgorithm(false);
+          setAlgorithmProgress(0);
           console.error("Failed to save graph:", error);
           toast.error("Không thể lưu đồ thị. Vui lòng thử lại.", { id: toastId });
           return;
         }
 
         if (!graphId) {
+          if (progressInterval) clearInterval(progressInterval);
+          setIsRunningAlgorithm(false);
+          setAlgorithmProgress(0);
           toast.error("Không thể lưu đồ thị. Vui lòng thử lại.", { id: toastId });
           return;
         }
@@ -111,6 +135,13 @@ export default function Home() {
           "connected-components": "Thành phần liên thông",
           "cycle-detection": "Phát hiện chu trình",
         };
+
+        if (progressInterval) clearInterval(progressInterval);
+        setAlgorithmProgress(100);
+        setTimeout(() => {
+          setIsRunningAlgorithm(false);
+          setAlgorithmProgress(0);
+        }, 500);
 
         toast.success(
           `Đã chạy thuật toán ${algorithmNames[algorithm] || algorithm} thành công!`,
@@ -192,6 +223,9 @@ export default function Home() {
           setNodeColors({});
         }
       } catch (error) {
+        if (progressInterval) clearInterval(progressInterval);
+        setIsRunningAlgorithm(false);
+        setAlgorithmProgress(0);
         console.error("Error running algorithm:", error);
         const errorMessage = error instanceof Error ? error.message : "Lỗi khi chạy thuật toán";
         toast.error(errorMessage, { id: toastId });
@@ -202,8 +236,25 @@ export default function Home() {
 
   return (
     <div className="h-[calc(100vh-120px)] min-h-0 overflow-hidden">
+      <AnimatePresence>
+        {isRunningAlgorithm && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4"
+          >
+            <div className="bg-background border border-border rounded-md p-4 shadow-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">Đang chạy thuật toán...</span>
+                <span className="text-xs text-muted-foreground">{algorithmProgress}%</span>
+              </div>
+              <Progress value={algorithmProgress} className="h-2" />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="flex flex-col lg:grid lg:grid-cols-4 h-full gap-2 lg:gap-4">
-        {/* 移动端：算法面板在顶部，桌面端：在左侧 */}
         <div className="lg:col-span-1 order-2 lg:order-1 shrink-0 lg:shrink">
           <AlgorithmPanel
             nodes={nodes}
@@ -211,8 +262,6 @@ export default function Home() {
             onRunAlgorithm={handleRunAlgorithm}
           />
         </div>
-
-        {/* 移动端：图编辑器在顶部（占据主要空间），桌面端：在右侧 */}
         <div className="lg:col-span-3 order-1 lg:order-2 flex-1 min-h-0 overflow-hidden">
           <GraphView
             nodes={nodes}

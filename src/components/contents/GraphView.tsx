@@ -1,14 +1,15 @@
 "use client";
 
 import { useCallback, useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1011,125 +1012,172 @@ export default function GraphView({
                 </g>
 
                 <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
-                  {edges.map((edge) => {
-                    const path = getEdgePath(edge);
-                    const isHighlighted = isEdgeHighlighted(edge);
-                    const labelPos = getEdgeLabelPosition(edge);
+                  <AnimatePresence>
+                    {edges.map((edge, index) => {
+                      const path = getEdgePath(edge);
+                      const isHighlighted = isEdgeHighlighted(edge);
+                      const labelPos = getEdgeLabelPosition(edge);
 
-                    return (
-                      <g key={edge.id}>
-                        {isHighlighted && (
-                          <path
-                            d={path}
-                            stroke="#22c55e"
-                            strokeWidth={6}
-                            fill="none"
-                            opacity={0.3}
-                            style={{ pointerEvents: "none" }}
-                          />
-                        )}
-                        <path
-                          d={path}
-                          stroke={isHighlighted ? "#22c55e" : "#ffffff"}
-                          strokeWidth={isHighlighted ? 4 : 3}
-                          fill="none"
-                          opacity={isHighlighted ? 1 : 0.9}
-                          className="cursor-pointer"
-                          style={{ pointerEvents: "stroke" }}
-                        />
-                        {edge.label && (
-                          <>
-                            <circle
-                              cx={labelPos.x}
-                              cy={labelPos.y}
-                              r={isHighlighted ? 14 : 12}
-                              fill={
-                                isHighlighted
-                                  ? "#22c55e"
-                                  : "#ffffff"
-                              }
-                              stroke={
-                                isHighlighted
-                                  ? "#22c55e"
-                                  : "#ffffff"
-                              }
-                              strokeWidth={isHighlighted ? 2 : 4}
+                      return (
+                        <motion.g
+                          key={edge.id}
+                          initial={{ opacity: 0, pathLength: 0 }}
+                          animate={{ opacity: 1, pathLength: 1 }}
+                          exit={{ opacity: 0, pathLength: 0 }}
+                          transition={{
+                            duration: 0.5,
+                            delay: index * 0.05,
+                            ease: "easeOut",
+                          }}
+                        >
+                          {isHighlighted && (
+                            <motion.path
+                              d={path}
+                              stroke="#22c55e"
+                              strokeWidth={6}
+                              fill="none"
+                              opacity={0.3}
+                              style={{ pointerEvents: "none" }}
+                              initial={{ pathLength: 0 }}
+                              animate={{ pathLength: 1 }}
+                              transition={{ duration: 0.6, ease: "easeInOut" }}
                             />
-                            <text
-                              x={labelPos.x}
-                              y={labelPos.y}
-                              textAnchor="middle"
-                              dominantBaseline="middle"
-                              fill={isHighlighted ? "#ffffff" : "#000"}
-                              fontSize={isHighlighted ? "14" : "13"}
-                              fontWeight="700"
-                              pointerEvents="none"
-                            >
-                              {edge.label}
-                            </text>
-                          </>
-                        )}
-                      </g>
-                    );
-                  })}
+                          )}
+                          <motion.path
+                            d={path}
+                            stroke={isHighlighted ? "#22c55e" : "#ffffff"}
+                            strokeWidth={isHighlighted ? 4 : 3}
+                            fill="none"
+                            opacity={isHighlighted ? 1 : 0.9}
+                            className="cursor-pointer"
+                            style={{ pointerEvents: "stroke" }}
+                            initial={{ pathLength: 0 }}
+                            animate={{ pathLength: 1 }}
+                            transition={{ duration: 0.5, ease: "easeInOut" }}
+                          />
+                          {edge.label && (
+                            <>
+                              <motion.circle
+                                cx={labelPos.x}
+                                cy={labelPos.y}
+                                r={isHighlighted ? 14 : 12}
+                                fill={
+                                  isHighlighted
+                                    ? "#22c55e"
+                                    : "#ffffff"
+                                }
+                                stroke={
+                                  isHighlighted
+                                    ? "#22c55e"
+                                    : "#ffffff"
+                                }
+                                strokeWidth={isHighlighted ? 2 : 4}
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ delay: 0.3, duration: 0.3 }}
+                              />
+                              <motion.text
+                                x={labelPos.x}
+                                y={labelPos.y}
+                                textAnchor="middle"
+                                dominantBaseline="middle"
+                                fill={isHighlighted ? "#ffffff" : "#000"}
+                                fontSize={isHighlighted ? "14" : "13"}
+                                fontWeight="700"
+                                pointerEvents="none"
+                                initial={{ opacity: 0, scale: 0 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: 0.4, duration: 0.2 }}
+                              >
+                                {edge.label}
+                              </motion.text>
+                            </>
+                          )}
+                        </motion.g>
+                      );
+                    })}
+                  </AnimatePresence>
 
-                  {nodes.map((node) => {
-                    const isHighlighted = isNodeHighlighted(node.id);
-                    const isSelected = selectedNode?.id === node.id;
-                    const nodeColor = nodeColors[node.id];
+                  <AnimatePresence>
+                    {nodes.map((node, index) => {
+                      const isHighlighted = isNodeHighlighted(node.id);
+                      const isSelected = selectedNode?.id === node.id;
+                      const nodeColor = nodeColors[node.id];
 
-                    return (
-                      <g key={node.id}>
-                        {isHighlighted && (
-                          <circle
+                      return (
+                        <motion.g
+                          key={node.id}
+                          initial={{ opacity: 0, scale: 0 }}
+                          animate={{ 
+                            opacity: 1, 
+                            scale: 1,
+                          }}
+                          exit={{ opacity: 0, scale: 0 }}
+                          transition={{
+                            duration: 0.4,
+                            delay: index * 0.08,
+                            ease: "easeOut",
+                          }}
+                        >
+                          {isHighlighted && (
+                            <motion.circle
+                              cx={node.x}
+                              cy={node.y}
+                              r={NODE_RADIUS + 5}
+                              fill="#22c55e"
+                              opacity={0.2}
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              transition={{ duration: 0.3 }}
+                            />
+                          )}
+                          <motion.circle
                             cx={node.x}
                             cy={node.y}
-                            r={NODE_RADIUS + 5}
-                            fill="#22c55e"
-                            opacity={0.2}
+                            r={NODE_RADIUS}
+                            fill={
+                              nodeColor || (isHighlighted ? "#22c55e" : "#ffffff")
+                            }
+                            stroke={
+                              isSelected
+                                ? "hsl(var(--primary))"
+                                : isHighlighted
+                                ? "#22c55e"
+                                : "#000000"
+                            }
+                            strokeWidth={isSelected || isHighlighted ? 4 : 1}
+                            className="cursor-move"
+                            filter="url(#node-shadow)"
+                            whileHover={{ scale: 1.1 }}
+                            transition={{ duration: 0.2 }}
                           />
-                        )}
-                        <circle
-                          cx={node.x}
-                          cy={node.y}
-                          r={NODE_RADIUS}
-                          fill={
-                            nodeColor || (isHighlighted ? "#22c55e" : "#ffffff")
-                          }
-                          stroke={
-                            isSelected
-                              ? "hsl(var(--primary))"
-                              : isHighlighted
-                              ? "#22c55e"
-                              : "#000000"
-                          }
-                          strokeWidth={isSelected || isHighlighted ? 4 : 1}
-                          className="cursor-move"
-                          filter="url(#node-shadow)"
-                        />
-                        <text
-                          x={node.x}
-                          y={node.y}
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                          fill={isHighlighted ? "#ffffff" : "#000000"}
-                          fontSize="14"
-                          fontWeight="600"
-                          pointerEvents="none"
-                        >
-                          {node.label}
-                        </text>
-                      </g>
-                    );
-                  })}
+                          <motion.text
+                            x={node.x}
+                            y={node.y}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            fill={isHighlighted ? "#ffffff" : "#000000"}
+                            fontSize="14"
+                            fontWeight="600"
+                            pointerEvents="none"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.2, duration: 0.2 }}
+                          >
+                            {node.label}
+                          </motion.text>
+                        </motion.g>
+                      );
+                    })}
+                  </AnimatePresence>
                 </g>
               </svg>
             </div>
           </div>
 
           {isMobile ? (
-            <Sheet>
-              <SheetTrigger asChild>
+            <Drawer direction="bottom">
+              <DrawerTrigger asChild>
                 <Button
                   variant="outline"
                   size="icon"
@@ -1137,15 +1185,13 @@ export default function GraphView({
                 >
                   <Menu className="h-5 w-5" />
                 </Button>
-              </SheetTrigger>
-              <SheetContent
-                side="bottom"
-                className="h-[85vh] overflow-y-auto pb-6 px-4"
-              >
-                <SheetHeader className="mb-4 pb-3 border-b">
-                  <SheetTitle className="text-lg">Điều khiển đồ thị</SheetTitle>
-                </SheetHeader>
-                <div className="space-y-4 pt-2">
+              </DrawerTrigger>
+              <DrawerContent className="max-h-[85vh] overflow-y-auto">
+                <DrawerHeader className="border-b border-border pb-4 px-4">
+                  <DrawerTitle className="text-lg">Điều khiển đồ thị</DrawerTitle>
+                </DrawerHeader>
+                <div className="px-4 pb-6 pt-4">
+                  <div className="space-y-4">
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Xem chi tiết</Label>
                     <Button
@@ -1390,9 +1436,10 @@ export default function GraphView({
                       <p>• Chụm để phóng to/thu nhỏ</p>
                     </div>
                   </div>
+                  </div>
                 </div>
-              </SheetContent>
-            </Sheet>
+              </DrawerContent>
+            </Drawer>
           ) : null}
 
           {!isMobile && (
