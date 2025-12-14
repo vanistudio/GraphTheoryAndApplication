@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Graph from "@/lib/models/Graph";
-import { getAuth } from "@/lib/auth";
-import { headers } from "next/headers";
 
 export async function GET() {
   try {
     await connectDB();
-    const auth = await getAuth();
-    const session = await auth.api.getSession({ headers: await headers() });
 
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const graphs = await Graph.find({ userId: session.user.id }).sort({ createdAt: -1 });
+    const graphs = await Graph.find().sort({ createdAt: -1 });
 
     return NextResponse.json({ graphs });
   } catch (error) {
@@ -26,12 +18,6 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     await connectDB();
-    const auth = await getAuth();
-    const session = await auth.api.getSession({ headers: await headers() });
-
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     const body = await request.json();
     const { name, nodes, edges } = body;
@@ -46,7 +32,6 @@ export async function POST(request: NextRequest) {
 
     const graph = new Graph({
       name,
-      userId: session.user.id,
       nodes,
       edges,
     });

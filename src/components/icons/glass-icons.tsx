@@ -272,6 +272,62 @@ export function MenuIcon({ className, size = 24 }: GlassIconProps) {
   );
 }
 
+export function SitemapIcon({ className, size = 24 }: GlassIconProps) {
+  const uniqueId = useId();
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      className={cn(className)}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <title>sitemap</title>
+      <g fill="none">
+        <path d="M13 10H17C18.6569 10 20 11.3431 20 13V18C20 18.5523 19.5523 19 19 19C18.4477 19 18 18.5523 18 18V13C18 12.4477 17.5523 12 17 12H7C6.44772 12 6 12.4477 6 13V18C6 18.5523 5.55228 19 5 19C4.44772 19 4 18.5523 4 18V13C4 11.3431 5.34315 10 7 10H11V5.5C11 4.94772 11.4477 4.5 12 4.5C12.5523 4.5 13 4.94772 13 5.5V10Z" fill={`url(#${uniqueId}_existing_0)`} data-glass="origin" mask={`url(#${uniqueId}_mask)`}></path>
+        <path d="M13 10H17C18.6569 10 20 11.3431 20 13V18C20 18.5523 19.5523 19 19 19C18.4477 19 18 18.5523 18 18V13C18 12.4477 17.5523 12 17 12H7C6.44772 12 6 12.4477 6 13V18C6 18.5523 5.55228 19 5 19C4.44772 19 4 18.5523 4 18V13C4 11.3431 5.34315 10 7 10H11V5.5C11 4.94772 11.4477 4.5 12 4.5C12.5523 4.5 13 4.94772 13 5.5V10Z" fill={`url(#${uniqueId}_existing_0)`} data-glass="clone" filter={`url(#${uniqueId}_filter)`} clipPath={`url(#${uniqueId}_clipPath)`}></path>
+        <path d="M5 15C6.933 15 8.5 16.567 8.5 18.5C8.5 20.433 6.933 22 5 22C3.067 22 1.5 20.433 1.5 18.5C1.5 16.567 3.067 15 5 15ZM19 15C20.933 15 22.5 16.567 22.5 18.5C22.5 20.433 20.933 22 19 22C17.067 22 15.5 20.433 15.5 18.5C15.5 16.567 17.067 15 19 15ZM12 0.5C13.933 0.5 15.5 2.067 15.5 4C15.5 5.933 13.933 7.5 12 7.5C10.067 7.5 8.5 5.933 8.5 4C8.5 2.067 10.067 0.5 12 0.5Z" fill={`url(#${uniqueId}_existing_1)`} data-glass="blur"></path>
+        <path d="M14.75 4C14.75 2.48122 13.5188 1.25 12 1.25C10.4812 1.25 9.25 2.48122 9.25 4C9.25 5.51878 10.4812 6.75 12 6.75V7.5C10.067 7.5 8.5 5.933 8.5 4C8.5 2.067 10.067 0.5 12 0.5C13.933 0.5 15.5 2.067 15.5 4C15.5 5.933 13.933 7.5 12 7.5V6.75C13.5188 6.75 14.75 5.51878 14.75 4Z" fill={`url(#${uniqueId}_existing_4)`}></path>
+        <path d="M7.75 18.5C7.75 16.9812 6.51878 15.75 5 15.75C3.48122 15.75 2.25 16.9812 2.25 18.5C2.25 20.0188 3.48122 21.25 5 21.25V22C3.067 22 1.5 20.433 1.5 18.5C1.5 16.567 3.067 15 5 15C6.933 15 8.5 16.567 8.5 18.5C8.5 20.433 6.933 22 5 22V21.25C6.51878 21.25 7.75 20.0188 7.75 18.5Z" fill={`url(#${uniqueId}_existing_5)`}></path>
+        <path d="M21.75 18.5C21.75 16.9812 20.5188 15.75 19 15.75C17.4812 15.75 16.25 16.9812 16.25 18.5C16.25 20.0188 17.4812 21.25 19 21.25V22C17.067 22 15.5 20.433 15.5 18.5C15.5 16.567 17.067 15 19 15C20.933 15 22.5 16.567 22.5 18.5C22.5 20.433 20.933 22 19 22V21.25C20.5188 21.25 21.75 20.0188 21.75 18.5Z" fill={`url(#${uniqueId}_existing_6)`}></path>
+        <defs>
+          <linearGradient id={`${uniqueId}_existing_0`} x1="12" y1="4.5" x2="12" y2="19" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#575757"></stop>
+            <stop offset="1" stopColor="#151515"></stop>
+          </linearGradient>
+          <linearGradient id={`${uniqueId}_existing_1`} x1="12" y1=".5" x2="12" y2="22" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#E3E3E5" stopOpacity=".6"></stop>
+            <stop offset="1" stopColor="#BBBBC0" stopOpacity=".6"></stop>
+          </linearGradient>
+          <linearGradient id={`${uniqueId}_existing_4`} x1="12" y1=".5" x2="12" y2="4.554" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#fff"></stop>
+            <stop offset="1" stopColor="#fff" stopOpacity="0"></stop>
+          </linearGradient>
+          <linearGradient id={`${uniqueId}_existing_5`} x1="5" y1="15" x2="5" y2="19.054" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#fff"></stop>
+            <stop offset="1" stopColor="#fff" stopOpacity="0"></stop>
+          </linearGradient>
+          <linearGradient id={`${uniqueId}_existing_6`} x1="19" y1="15" x2="19" y2="19.054" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#fff"></stop>
+            <stop offset="1" stopColor="#fff" stopOpacity="0"></stop>
+          </linearGradient>
+          <filter id={`${uniqueId}_filter`} x="-100%" y="-100%" width="400%" height="400%" filterUnits="objectBoundingBox" primitiveUnits="userSpaceOnUse">
+            <feGaussianBlur stdDeviation="2" x="0%" y="0%" width="100%" height="100%" in="SourceGraphic" edgeMode="none" result="blur"></feGaussianBlur>
+          </filter>
+          <clipPath id={`${uniqueId}_clipPath`}>
+            <path d="M5 15C6.933 15 8.5 16.567 8.5 18.5C8.5 20.433 6.933 22 5 22C3.067 22 1.5 20.433 1.5 18.5C1.5 16.567 3.067 15 5 15ZM19 15C20.933 15 22.5 16.567 22.5 18.5C22.5 20.433 20.933 22 19 22C17.067 22 15.5 20.433 15.5 18.5C15.5 16.567 17.067 15 19 15ZM12 0.5C13.933 0.5 15.5 2.067 15.5 4C15.5 5.933 13.933 7.5 12 7.5C10.067 7.5 8.5 5.933 8.5 4C8.5 2.067 10.067 0.5 12 0.5Z"></path>
+          </clipPath>
+          <mask id={`${uniqueId}_mask`}>
+            <rect width="100%" height="100%" fill="#FFF"></rect>
+            <path d="M5 15C6.933 15 8.5 16.567 8.5 18.5C8.5 20.433 6.933 22 5 22C3.067 22 1.5 20.433 1.5 18.5C1.5 16.567 3.067 15 5 15ZM19 15C20.933 15 22.5 16.567 22.5 18.5C22.5 20.433 20.933 22 19 22C17.067 22 15.5 20.433 15.5 18.5C15.5 16.567 17.067 15 19 15ZM12 0.5C13.933 0.5 15.5 2.067 15.5 4C15.5 5.933 13.933 7.5 12 7.5C10.067 7.5 8.5 5.933 8.5 4C8.5 2.067 10.067 0.5 12 0.5Z" fill="#000"></path>
+          </mask>
+        </defs>
+      </g>
+    </svg>
+  );
+}
+
 export function CloseIcon({ className, size = 24 }: GlassIconProps) {
   return (
     <svg
@@ -293,6 +349,57 @@ export function CloseIcon({ className, size = 24 }: GlassIconProps) {
         fill="url(#close-gradient)"
         style={glassStyle}
       />
+    </svg>
+  );
+}
+
+export function UsersIcon({ className, size = 24 }: GlassIconProps) {
+  const uniqueId = useId();
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      className={cn(className)}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <title>users</title>
+      <g fill="none">
+        <path d="M15.9414 10C19.8397 10.0001 22.9999 13.1603 23 17.0586C23 18.1307 22.1307 19 21.0586 19H9.94141C8.86932 19 8 18.1307 8 17.0586C8.00012 13.1603 11.1603 10.0001 15.0586 10H15.9414ZM15.5 1C17.433 1 19 2.567 19 4.5C19 6.433 17.433 8 15.5 8C13.567 8 12 6.433 12 4.5C12 2.567 13.567 1 15.5 1Z" fill={`url(#${uniqueId}_existing_0)`} data-glass="origin" mask={`url(#${uniqueId}_mask)`}></path>
+        <path d="M15.9414 10C19.8397 10.0001 22.9999 13.1603 23 17.0586C23 18.1307 22.1307 19 21.0586 19H9.94141C8.86932 19 8 18.1307 8 17.0586C8.00012 13.1603 11.1603 10.0001 15.0586 10H15.9414ZM15.5 1C17.433 1 19 2.567 19 4.5C19 6.433 17.433 8 15.5 8C13.567 8 12 6.433 12 4.5C12 2.567 13.567 1 15.5 1Z" fill={`url(#${uniqueId}_existing_0)`} data-glass="clone" filter={`url(#${uniqueId}_filter)`} clipPath={`url(#${uniqueId}_clipPath)`}></path>
+        <path d="M10.3076 12C14.556 12 18 15.444 18 19.6924C18 20.9668 16.9668 22 15.6924 22H4.30762C3.03317 22 2.00004 20.9668 2 19.6924C2 15.444 5.44404 12 9.69238 12H10.3076ZM10 2C12.2091 2 14 3.79086 14 6C14 8.20914 12.2091 10 10 10C7.79086 10 6 8.20914 6 6C6 3.79086 7.79086 2 10 2Z" fill={`url(#${uniqueId}_existing_1)`} data-glass="blur"></path>
+        <path d="M13.25 6C13.25 4.20507 11.7949 2.75 10 2.75C8.20507 2.75 6.75 4.20507 6.75 6C6.75 7.79493 8.20507 9.25 10 9.25V10C7.79086 10 6 8.20914 6 6C6 3.79086 7.79086 2 10 2C12.2091 2 14 3.79086 14 6C14 8.20914 12.2091 10 10 10V9.25C11.7949 9.25 13.25 7.79493 13.25 6Z" fill={`url(#${uniqueId}_existing_2)`}></path>
+        <path d="M15.6924 21.25V22H4.30762V21.25H15.6924ZM17.25 19.6924C17.25 15.8583 14.1417 12.75 10.3076 12.75H9.69238C5.85825 12.75 2.75 15.8583 2.75 19.6924C2.75004 20.5526 3.44739 21.25 4.30762 21.25V22C3.11295 22 2.13009 21.0921 2.01172 19.9287L2 19.6924C2 15.5767 5.23229 12.2156 9.29688 12.0098L9.69238 12H10.3076C14.556 12 18 15.444 18 19.6924L17.9883 19.9287C17.8778 21.0145 17.0145 21.8778 15.9287 21.9883L15.6924 22V21.25C16.5526 21.25 17.25 20.5526 17.25 19.6924Z" fill={`url(#${uniqueId}_existing_3)`}></path>
+        <defs>
+          <linearGradient id={`${uniqueId}_existing_0`} x1="15.5" y1="1" x2="15.5" y2="19" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#575757"></stop>
+            <stop offset="1" stopColor="#151515"></stop>
+          </linearGradient>
+          <linearGradient id={`${uniqueId}_existing_1`} x1="10" y1="2" x2="10" y2="22" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#E3E3E5" stopOpacity="0.6"></stop>
+            <stop offset="1" stopColor="#BBBBC0" stopOpacity="0.6"></stop>
+          </linearGradient>
+          <linearGradient id={`${uniqueId}_existing_2`} x1="10" y1="2" x2="10" y2="6.633" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#fff"></stop>
+            <stop offset="1" stopColor="#fff" stopOpacity="0"></stop>
+          </linearGradient>
+          <linearGradient id={`${uniqueId}_existing_3`} x1="10" y1="12" x2="10" y2="17.791" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#fff"></stop>
+            <stop offset="1" stopColor="#fff" stopOpacity="0"></stop>
+          </linearGradient>
+          <filter id={`${uniqueId}_filter`} x="-100%" y="-100%" width="400%" height="400%" filterUnits="objectBoundingBox" primitiveUnits="userSpaceOnUse">
+            <feGaussianBlur stdDeviation="2" x="0%" y="0%" width="100%" height="100%" in="SourceGraphic" edgeMode="none" result="blur"></feGaussianBlur>
+          </filter>
+          <clipPath id={`${uniqueId}_clipPath`}>
+            <path d="M10.3076 12C14.556 12 18 15.444 18 19.6924C18 20.9668 16.9668 22 15.6924 22H4.30762C3.03317 22 2.00004 20.9668 2 19.6924C2 15.444 5.44404 12 9.69238 12H10.3076ZM10 2C12.2091 2 14 3.79086 14 6C14 8.20914 12.2091 10 10 10C7.79086 10 6 8.20914 6 6C6 3.79086 7.79086 2 10 2Z"></path>
+          </clipPath>
+          <mask id={`${uniqueId}_mask`}>
+            <rect width="100%" height="100%" fill="#FFF"></rect>
+            <path d="M10.3076 12C14.556 12 18 15.444 18 19.6924C18 20.9668 16.9668 22 15.6924 22H4.30762C3.03317 22 2.00004 20.9668 2 19.6924C2 15.444 5.44404 12 9.69238 12H10.3076ZM10 2C12.2091 2 14 3.79086 14 6C14 8.20914 12.2091 10 10 10C7.79086 10 6 8.20914 6 6C6 3.79086 7.79086 2 10 2Z" fill="#000"></path>
+          </mask>
+        </defs>
+      </g>
     </svg>
   );
 }

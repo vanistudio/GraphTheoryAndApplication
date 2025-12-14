@@ -2,8 +2,7 @@ import mongoose, { Schema, Document } from "mongoose";
 
 export interface IAlgorithmResult extends Document {
   graphId: string;
-  userId: string;
-  algorithm: "dijkstra" | "bellman-ford" | "kruskal" | "prim" | "graph-coloring" | "connected-components" | "cycle-detection";
+  algorithm: "dijkstra" | "bellman-ford" | "kruskal" | "prim" | "connected-components" | "cycle-detection";
   result: {
     path?: string[];
     distance?: number;
@@ -26,10 +25,9 @@ export interface IAlgorithmResult extends Document {
 const AlgorithmResultSchema = new Schema<IAlgorithmResult>(
   {
     graphId: { type: String, required: true, index: true },
-    userId: { type: String, required: true, index: true },
     algorithm: {
       type: String,
-      enum: ["dijkstra", "bellman-ford", "kruskal", "prim", "graph-coloring", "connected-components", "cycle-detection"],
+      enum: ["dijkstra", "bellman-ford", "kruskal", "prim", "connected-components", "cycle-detection"],
       required: true,
     },
     result: { type: Schema.Types.Mixed, required: true },

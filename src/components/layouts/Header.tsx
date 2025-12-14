@@ -23,25 +23,7 @@ export default function Header() {
         <span className="sr-only">Toggle Sidebar</span>
       </SidebarTrigger>
       <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,box-shadow] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive hover:bg-accent/50 hover:text-accent-foreground size-9 h-7 w-7 cursor-pointer"
-        >
-          <svg height="16" width="16" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
-            <g fill="#737373">
-              <path d="M7.973 4.358C11.045 3.714 13.75 6.041 13.75 9C13.75 10.8669 12.6695 12.4752 11.1028 13.25H6.89721C5.11106 12.3665 3.95706 10.3995 4.315 8.202C4.623 6.315 6.101 4.75 7.973 4.358Z" fill="#737373" fillOpacity="0.3" fillRule="evenodd" stroke="none" />
-              <path d="M9 0.75V1.75" fill="none" stroke="#737373" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-              <path d="M14.834 3.16599L14.127 3.87299" fill="none" stroke="#737373" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-              <path d="M17.25 9H16.25" fill="none" stroke="#737373" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-              <path d="M3.166 3.16599L3.873 3.87299" fill="none" stroke="#737373" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-              <path d="M0.75 9H1.75" fill="none" stroke="#737373" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-              <path d="M13.75 9C13.75 6.041 11.045 3.714 7.973 4.358C6.101 4.75 4.623 6.315 4.315 8.202C3.934 10.541 5.266 12.619 7.25 13.407V15.75C7.25 16.302 7.698 16.75 8.25 16.75H9.75C10.302 16.75 10.75 16.302 10.75 15.75V13.407C12.505 12.71 13.75 11.004 13.75 9Z" fill="none" stroke="#737373" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-              <path d="M6.897 13.25H11.103" fill="none" stroke="#737373" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-            </g>
-          </svg>
-        </Button>
-        <Link href="https://github.com" target="_blank">
+        <Link href="//github.com/vanistudio/GraphTheoryAndApplication" target="_blank">
           <Button
             variant="secondary"
             size="sm"
@@ -51,7 +33,7 @@ export default function Header() {
             <Github className="size-3" />
           </Button>
         </Link>
-        <Link href="https://legions.dev" target="_blank">
+        <Link href="//facebook.com/vanixjnk" target="_blank">
           <Button
             variant="outline"
             size="sm"
@@ -64,4 +46,3 @@ export default function Header() {
     </header>
   );
 }
-

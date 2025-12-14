@@ -233,9 +233,6 @@ export default function AlgorithmPanel({
                 <p className="text-xs text-muted-foreground">
                   {selectedInfo.description}
                 </p>
-                <Badge variant="outline" className="text-xs mt-1">
-                  Độ phức tạp: {selectedInfo.complexity}
-                </Badge>
               </div>
             </AlertDescription>
           </Alert>

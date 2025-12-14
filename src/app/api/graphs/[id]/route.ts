@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Graph from "@/lib/models/Graph";
-import { getAuth } from "@/lib/auth";
-import { headers } from "next/headers";
 
 export async function GET(
   request: NextRequest,
@@ -10,15 +8,9 @@ export async function GET(
 ) {
   try {
     await connectDB();
-    const auth = await getAuth();
-    const session = await auth.api.getSession({ headers: await headers() });
     const { id } = await params;
 
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const graph = await Graph.findOne({ _id: id, userId: session.user.id });
+    const graph = await Graph.findOne({ _id: id });
 
     if (!graph) {
       return NextResponse.json({ error: "Graph not found" }, { status: 404 });
@@ -37,15 +29,9 @@ export async function DELETE(
 ) {
   try {
     await connectDB();
-    const auth = await getAuth();
-    const session = await auth.api.getSession({ headers: await headers() });
     const { id } = await params;
 
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const graph = await Graph.findOneAndDelete({ _id: id, userId: session.user.id });
+    const graph = await Graph.findOneAndDelete({ _id: id });
 
     if (!graph) {
       return NextResponse.json({ error: "Graph not found" }, { status: 404 });

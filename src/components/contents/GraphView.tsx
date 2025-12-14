@@ -154,7 +154,7 @@ export default function GraphView({
     },
     [nodes]
   );
-
+    
   const getEdgeLabelPosition = useCallback(
     (edge: GraphEdge) => {
       const sourceNode = nodes.find((n) => n.id === edge.source);
@@ -458,7 +458,7 @@ export default function GraphView({
             (e) =>
                 (e.source === newNodes[i].id && e.target === newNodes[j].id) ||
                 (e.source === newNodes[j].id && e.target === newNodes[i].id)
-            );
+          );
 
             if (!existingEdge) {
               newEdges.push({
@@ -468,8 +468,8 @@ export default function GraphView({
                 weight,
                 label: weight.toString(),
               });
-            }
           }
+        }
         }
       }
 
@@ -528,7 +528,7 @@ export default function GraphView({
             nextRow = row + 1;
             if (nextRow >= matrixSize) {
               nextRow = 0;
-            }
+      }
           }
           const nextKey = `${nextRow}-${nextCol}`;
           const nextInput = inputRefs.current[nextKey];
@@ -652,7 +652,7 @@ export default function GraphView({
       const newEdges = edges.map((e) =>
           e.id === selectedEdge.id
           ? { ...e, weight, label: weight.toString() }
-          : e
+            : e
       );
       setEdges(newEdges);
       onEdgesChange(newEdges);
@@ -798,7 +798,7 @@ export default function GraphView({
               </AlertDescription>
             </Alert>
               </div>
-            )}
+          )}
             <div className="h-full w-full relative overflow-hidden bg-background">
               <div className="absolute top-2 right-2 lg:top-4 lg:right-4 z-20 flex flex-col gap-2">
                 <Button
@@ -1600,7 +1600,7 @@ export default function GraphView({
                         </div>
                       </Card>
                 </div>
-              )}
+                  )}
 
               {selectedEdge && (
                 <div className="space-y-2">

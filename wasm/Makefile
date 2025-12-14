@@ -1,8 +1,8 @@
 CC = emcc
 
-FAST_CFLAGS = -O0 -s WASM=1 -s EXPORTED_FUNCTIONS='["_dijkstra_wasm", "_bellman_ford_wasm", "_malloc", "_free"]' -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' -s ALLOW_MEMORY_GROWTH=1 -s MODULARIZE=1 -s EXPORT_NAME="createWasmModule" --no-entry -g
+FAST_CFLAGS = -O0 -s WASM=1 -s EXPORTED_FUNCTIONS='["_dijkstra_wasm", "_bellman_ford_wasm", "_malloc", "_free"]' -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap", "HEAP32", "HEAPF64"]' -s ALLOW_MEMORY_GROWTH=1 -s MODULARIZE=1 -s EXPORT_NAME="createWasmModule" --no-entry -g
 
-PROD_CFLAGS = -O3 -s WASM=1 -s EXPORTED_FUNCTIONS='["_dijkstra_wasm", "_bellman_ford_wasm", "_malloc", "_free"]' -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap", "UTF8ToString", "stringToUTF8"]' -s ALLOW_MEMORY_GROWTH=1 -s MODULARIZE=1 -s EXPORT_NAME="createWasmModule" --no-entry
+PROD_CFLAGS = -O3 -s WASM=1 -s EXPORTED_FUNCTIONS='["_dijkstra_wasm", "_bellman_ford_wasm", "_malloc", "_free"]' -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap", "UTF8ToString", "stringToUTF8", "HEAP32", "HEAPF64"]' -s ALLOW_MEMORY_GROWTH=1 -s MODULARIZE=1 -s EXPORT_NAME="createWasmModule" --no-entry
 
 all: algorithms.wasm algorithms.js
 

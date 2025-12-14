@@ -16,7 +16,6 @@ export interface IGraphEdge {
 
 export interface IGraph extends Document {
   name: string;
-  userId: string;
   nodes: IGraphNode[];
   edges: IGraphEdge[];
   createdAt: Date;
@@ -43,7 +42,6 @@ const GraphEdgeSchema = new Schema<IGraphEdge>({
 const GraphSchema = new Schema<IGraph>(
   {
     name: { type: String, required: true },
-    userId: { type: String, required: true, index: true },
     nodes: [GraphNodeSchema],
     edges: [GraphEdgeSchema],
   },

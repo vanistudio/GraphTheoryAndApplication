@@ -73,7 +73,6 @@ export async function dijkstra(
       distances[node.id] = wasmDistances[index];
       previous[node.id] = null;
     });
-
     const adjacencyList: Record<string, Array<{ target: string; weight: number }>> = {};
     nodes.forEach((node) => {
       adjacencyList[node.id] = [];
@@ -83,48 +82,90 @@ export async function dijkstra(
       adjacencyList[edge.source].push({ target: edge.target, weight: edge.weight });
       adjacencyList[edge.target].push({ target: edge.source, weight: edge.weight });
     });
-
-    const visited = new Set<string>();
-    const sortedNodes = [...nodes].sort((a, b) => distances[a.id] - distances[b.id]);
-    
-    for (const node of sortedNodes) {
-      if (distances[node.id] === Infinity) break;
-      if (visited.has(node.id)) continue;
+    if (targetId && distances[targetId] !== Infinity) {
+      let current: string | null = targetId;
+      const visited = new Set<string>();
       
-      visited.add(node.id);
-      steps.push({
-        node: node.id,
-        distance: distances[node.id],
-        visited: true,
-      });
-
-      if (targetId && node.id === targetId) break;
-
-      adjacencyList[node.id].forEach((neighbor) => {
-        const alt = distances[node.id] + neighbor.weight;
-        if (alt < distances[neighbor.target]) {
-          distances[neighbor.target] = alt;
-          previous[neighbor.target] = node.id;
+      while (current !== null && current !== sourceId) {
+        visited.add(current);
+        let bestPrev: string | null = null;
+        let found = false;
+        
+        adjacencyList[current].forEach((neighbor) => {
+          if (!visited.has(neighbor.target)) {
+            const edge = edges.find(
+              (e) =>
+                (e.source === neighbor.target && e.target === current) ||
+                (e.source === current && e.target === neighbor.target)
+            );
+            if (edge && current !== null) {
+              const expectedDist = distances[neighbor.target] + edge.weight;
+              if (Math.abs(expectedDist - distances[current]) < 0.001) {
+                if (bestPrev === null) {
+                  bestPrev = neighbor.target;
+                  found = true;
+                } else if (distances[neighbor.target] < distances[bestPrev]) {
+                  bestPrev = neighbor.target;
+                  found = true;
+                }
+              }
+            }
+          }
+        });
+        
+        if (found && bestPrev !== null) {
+          previous[current] = bestPrev;
+          current = bestPrev;
+        } else {
+          break;
         }
-      });
+      }
+      if (current === sourceId) {
+        previous[sourceId] = null;
+      }
     }
+    const sortedNodes = [...nodes].sort((a, b) => distances[a.id] - distances[b.id]);
+    sortedNodes.forEach((node) => {
+      if (distances[node.id] !== Infinity) {
+        steps.push({
+          node: node.id,
+          distance: distances[node.id],
+          visited: true,
+        });
+      }
+    });
 
     const path: string[] = [];
     let distance = 0;
-    if (targetId && previous[targetId] !== null) {
-      let current: string | null = targetId;
-      while (current !== null) {
-        path.unshift(current);
-        const prev: string | null = previous[current] ?? null;
-        if (prev !== null) {
-          const edge = edges.find(
-            (e) =>
-              (e.source === prev && e.target === current) ||
-              (e.source === current && e.target === prev)
-          );
-          if (edge) distance += edge.weight;
+    if (targetId && distances[targetId] !== Infinity) {
+      if (targetId === sourceId) {
+        path.push(sourceId);
+        distance = 0;
+      } else {
+        let current: string | null = targetId;
+        while (current !== null) {
+          path.unshift(current);
+          const prev: string | null = previous[current] ?? null;
+          if (prev !== null) {
+            const edge = edges.find(
+              (e) =>
+                (e.source === prev && e.target === current) ||
+                (e.source === current && e.target === prev)
+            );
+            if (edge) distance += edge.weight;
+          }
+          current = prev;
+          if (current === sourceId) {
+            path.unshift(sourceId);
+            break;
+          }
         }
-        current = prev;
+        if (path.length > 0 && path[0] !== sourceId) {
+          path.unshift(sourceId);
+        }
+        if (distance === 0 && path.length > 1) {
+          distance = distances[targetId];
+        }
       }
     }
 

@@ -2,6 +2,25 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+### Cấu hình API Key (Tùy chọn)
+
+Ứng dụng sử dụng 3 phương án để lấy đường đi:
+1. **OpenRouteService** (ưu tiên) - Cần API key miễn phí
+2. **OSRM** (dự phòng) - Public server, có thể chậm
+3. **Khoảng cách đường chim bay** (fallback) - Luôn hoạt động
+
+Để sử dụng OpenRouteService (khuyến nghị):
+1. Đăng ký tài khoản miễn phí tại: https://openrouteservice.org/dev/#/signup
+2. Lấy API key từ dashboard
+3. Tạo file `.env.local` trong thư mục gốc:
+```env
+NEXT_PUBLIC_OPENROUTESERVICE_API_KEY=your_api_key_here
+```
+
+Nếu không có API key, ứng dụng sẽ tự động dùng OSRM hoặc fallback về khoảng cách đường chim bay.
+
+### Chạy ứng dụng
+
 First, run the development server:
 
 ```bash

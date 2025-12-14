@@ -3,7 +3,6 @@
 import { useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import AlgorithmPanel from "@/components/contents/AlgorithmPanel";
-import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
 import betterFetch from "@/lib/better-fetch";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,7 +32,6 @@ export default function Home() {
   const [nodeColors, setNodeColors] = useState<Record<string, string>>({});
   const [algorithmProgress, setAlgorithmProgress] = useState<number>(0);
   const [isRunningAlgorithm, setIsRunningAlgorithm] = useState<boolean>(false);
-  const session = authClient.useSession();
 
   const handleNodesChange = useCallback((newNodes: GraphNode[]) => {
     setNodes(newNodes);
@@ -45,11 +43,6 @@ export default function Home() {
 
   const handleRunAlgorithm = useCallback(
     async (algorithm: string, sourceNode?: string, targetNode?: string) => {
-      if (!session.data?.user) {
-        toast.error("Vui lòng đăng nhập để chạy thuật toán");
-        return;
-      }
-
       if (nodes.length === 0) {
         toast.warning("Vui lòng thêm ít nhất một node vào đồ thị");
         return;
@@ -58,8 +51,6 @@ export default function Home() {
       setIsRunningAlgorithm(true);
       setAlgorithmProgress(0);
       const toastId = toast.loading("Đang chạy thuật toán...");
-
-      // Simulate progress
       let progressInterval: NodeJS.Timeout | null = null;
       progressInterval = setInterval(() => {
         setAlgorithmProgress((prev) => {
@@ -231,7 +222,7 @@ export default function Home() {
         toast.error(errorMessage, { id: toastId });
       }
     },
-    [session, nodes, edges, graphName]
+    [nodes, edges, graphName]
   );
 
   return (
