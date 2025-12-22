@@ -25,24 +25,24 @@ const members = [
   },
   {
     id: 3,
-    name: "Thành viên 3",
-    studentId: "50.01.104.XXX",
+    name: "Lê Việt Phương",
+    studentId: "50.01.104.124",
     department: "Công nghệ thông tin",
-    role: "Phát triển backend",
+    role: "Kiểm thử và báo cáo",
   },
   {
     id: 4,
-    name: "Thành viên 4",
-    studentId: "50.01.104.XXX",
+    name: "Trương Minh Mẫn",
+    studentId: "50.01.104.087",
     department: "Công nghệ thông tin",
-    role: "Kiểm thử và QA",
+    role: "Kiểm thử và báo cáo",
   },
   {
     id: 5,
-    name: "Thành viên 5",
-    studentId: "50.01.104.XXX",
+    name: "Đặng Lê Minh Lâm",
+    studentId: "50.01.104. 083",
     department: "Công nghệ thông tin",
-    role: "Quản lý dự án",
+    role: "Kiểm thử và báo cáo",
   },
 ];
 

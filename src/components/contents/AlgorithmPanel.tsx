@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Info, Play, Zap, Network, Link2 } from "lucide-react";
+import { Info, Play, Zap, Network, Link2, AlertTriangle } from "lucide-react";
 import type { GraphNode, GraphEdge } from "@/components/contents/GraphView";
 
 type Algorithm = "dijkstra" | "bellman-ford" | "kruskal" | "prim" | "connected-components" | "cycle-detection";
@@ -82,6 +82,60 @@ export default function AlgorithmPanel({
   const [sourceNode, setSourceNode] = useState<string>("");
   const [targetNode, setTargetNode] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [hasNegativeWeights, setHasNegativeWeights] = useState<boolean | null>(null);
+  useEffect(() => {
+    const checkNegativeWeights = async () => {
+      if (edges.length === 0 || nodes.length === 0) {
+        setHasNegativeWeights(false);
+        return;
+      }
+      const hasNegative = edges.some(edge => edge.weight < 0);
+      
+      if (hasNegative) {
+        setHasNegativeWeights(true);
+        return;
+      }
+      if (typeof window !== "undefined") {
+        try {
+          const { loadWasmModule, hasNegativeWeightWasm } = await import("@/lib/algorithms/wasm-loader");
+          await loadWasmModule();
+
+          const nodeIndexMap = new Map<string, number>();
+          nodes.forEach((node, index) => {
+            nodeIndexMap.set(node.id, index);
+          });
+
+          const n = nodes.length;
+          const matrix: number[][] = Array(n).fill(null).map(() => Array(n).fill(Infinity));
+          
+          nodes.forEach((_, i) => {
+            matrix[i][i] = 0;
+          });
+
+          edges.forEach((edge) => {
+            const u = nodeIndexMap.get(edge.source);
+            const v = nodeIndexMap.get(edge.target);
+            if (u !== undefined && v !== undefined) {
+              matrix[u][v] = edge.weight;
+              matrix[v][u] = edge.weight;
+            }
+          });
+
+          const result = hasNegativeWeightWasm(n, matrix);
+          setHasNegativeWeights(result);
+        } catch {
+          // Fallback về kiểm tra TypeScript
+          const hasNegative = edges.some(edge => edge.weight < 0);
+          setHasNegativeWeights(hasNegative);
+        }
+      } else {
+        setHasNegativeWeights(false);
+      }
+    };
+
+    checkNegativeWeights();
+  }, [edges, nodes]);
+  const isDijkstraDisabled = hasNegativeWeights === true;
 
   const handleRun = async () => {
     if (!selectedAlgorithm) {
@@ -140,7 +194,9 @@ export default function AlgorithmPanel({
   const canRun =
     selectedAlgorithm &&
     nodes.length > 0 &&
-    (selectedAlgorithm === "dijkstra" || selectedAlgorithm === "bellman-ford"
+    (selectedAlgorithm === "dijkstra" 
+      ? !isDijkstraDisabled && sourceNode !== ""
+      : selectedAlgorithm === "bellman-ford"
       ? sourceNode !== ""
       : selectedAlgorithm === "kruskal" || selectedAlgorithm === "prim"
       ? edges.length > 0
@@ -205,8 +261,13 @@ export default function AlgorithmPanel({
               <SelectValue placeholder="Chọn thuật toán" />
             </SelectTrigger>
             <SelectContent className={customButtonShadow}>
-              <SelectItem value="dijkstra">
+              <SelectItem 
+                value="dijkstra"
+                disabled={isDijkstraDisabled}
+                className={isDijkstraDisabled ? "opacity-50 cursor-not-allowed" : ""}
+              >
                 Dijkstra (Đường đi ngắn nhất)
+                {isDijkstraDisabled && " (Không hỗ trợ trọng số âm)"}
               </SelectItem>
               <SelectItem value="bellman-ford">
                 Bellman-Ford (Có trọng số âm)
@@ -234,6 +295,38 @@ export default function AlgorithmPanel({
                   {selectedInfo.description}
                 </p>
               </div>
+            </AlertDescription>
+          </Alert>
+        )}
+        {hasNegativeWeights === true && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              <div className="space-y-1">
+                <p className="font-medium">Đồ thị có trọng số âm</p>
+                <p className="text-muted-foreground">
+                  Thuật toán Dijkstra đã bị vô hiệu hóa vì không hỗ trợ trọng số âm. 
+                  Sử dụng Bellman-Ford để xử lý đồ thị có trọng số âm.
+                </p>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+        {selectedAlgorithm === "dijkstra" && isDijkstraDisabled && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              Thuật toán Dijkstra không thể chạy với đồ thị có trọng số âm. 
+              Vui lòng chọn Bellman-Ford hoặc loại bỏ các cạnh có trọng số âm.
+            </AlertDescription>
+          </Alert>
+        )}
+        {(selectedAlgorithm === "kruskal" || selectedAlgorithm === "prim") && 
+         hasNegativeWeights === true && (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              Đồ thị có trọng số âm. Cây khung nhỏ nhất có thể không tồn tại nếu có chu trình âm.
             </AlertDescription>
           </Alert>
         )}

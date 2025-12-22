@@ -55,7 +55,48 @@ class UnionFind {
   }
 }
 
-export function kruskal(nodes: GraphNode[], edges: GraphEdge[]): KruskalResult {
+export async function kruskal(nodes: GraphNode[], edges: GraphEdge[]): Promise<KruskalResult> {
+  if (typeof window !== "undefined") {
+    try {
+      const { loadWasmModule, kruskalWasm } = await import("./wasm-loader");
+      await loadWasmModule();
+
+      const nodeIndexMap = new Map<string, number>();
+      nodes.forEach((node, index) => {
+        nodeIndexMap.set(node.id, index);
+      });
+
+      const wasmEdges = edges.map((edge) => {
+        const u = nodeIndexMap.get(edge.source);
+        const v = nodeIndexMap.get(edge.target);
+        if (u === undefined || v === undefined) {
+          throw new Error("Edge node not found");
+        }
+        return { u, v, w: edge.weight };
+      });
+
+      const totalWeight = kruskalWasm(nodes.length, wasmEdges);
+
+      if (totalWeight === -1) {
+        return kruskalTS(nodes, edges);
+      }
+      const tsResult = kruskalTS(nodes, edges);
+      return {
+        ...tsResult,
+        totalWeight,
+      };
+    } catch (error) {
+      if (typeof window !== "undefined") {
+        console.warn("WASM failed, falling back to TypeScript implementation:", error);
+      }
+      return kruskalTS(nodes, edges);
+    }
+  }
+
+  return kruskalTS(nodes, edges);
+}
+
+function kruskalTS(nodes: GraphNode[], edges: GraphEdge[]): KruskalResult {
   const mst: MSTEdge[] = [];
   const steps: Array<{ edge: MSTEdge; action: "add" | "skip"; reason?: string }> = [];
   const unionFind = new UnionFind(nodes);

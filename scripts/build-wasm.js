@@ -64,7 +64,7 @@ function escapeForShell(str) {
 const fastFlags = [
   "-O0",
   "-s", "WASM=1",
-  "-s", escapeForShell('EXPORTED_FUNCTIONS=["_dijkstra_wasm", "_bellman_ford_wasm", "_malloc", "_free"]'),
+  "-s", escapeForShell('EXPORTED_FUNCTIONS=["_has_negative_weight_wasm", "_dijkstra_wasm", "_bellman_ford_wasm", "_kruskal_wasm", "_prim_wasm", "_malloc", "_free"]'),
   "-s", escapeForShell('EXPORTED_RUNTIME_METHODS=["ccall", "cwrap", "HEAP32", "HEAPF64"]'),
   "-s", "ALLOW_MEMORY_GROWTH=1",
   "-s", "MODULARIZE=1",
@@ -76,7 +76,7 @@ const fastFlags = [
 const prodFlags = [
   "-O3",
   "-s", "WASM=1",
-  "-s", escapeForShell('EXPORTED_FUNCTIONS=["_dijkstra_wasm", "_bellman_ford_wasm", "_malloc", "_free"]'),
+  "-s", escapeForShell('EXPORTED_FUNCTIONS=["_has_negative_weight_wasm", "_dijkstra_wasm", "_bellman_ford_wasm", "_kruskal_wasm", "_prim_wasm", "_malloc", "_free"]'),
   "-s", escapeForShell('EXPORTED_RUNTIME_METHODS=["ccall", "cwrap", "UTF8ToString", "stringToUTF8", "HEAP32", "HEAPF64"]'),
   "-s", "ALLOW_MEMORY_GROWTH=1",
   "-s", "MODULARIZE=1",

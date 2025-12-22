@@ -11,7 +11,55 @@ export interface PrimResult {
   }>;
 }
 
-export function prim(nodes: GraphNode[], edges: GraphEdge[]): PrimResult {
+export async function prim(nodes: GraphNode[], edges: GraphEdge[]): Promise<PrimResult> {
+  if (typeof window !== "undefined") {
+    try {
+      const { loadWasmModule, primWasm } = await import("./wasm-loader");
+      await loadWasmModule();
+
+      const nodeIndexMap = new Map<string, number>();
+      nodes.forEach((node, index) => {
+        nodeIndexMap.set(node.id, index);
+      });
+
+      const n = nodes.length;
+      const matrix: number[][] = Array(n).fill(null).map(() => Array(n).fill(Infinity));
+      
+      nodes.forEach((_, i) => {
+        matrix[i][i] = 0;
+      });
+
+      edges.forEach((edge) => {
+        const u = nodeIndexMap.get(edge.source);
+        const v = nodeIndexMap.get(edge.target);
+        if (u !== undefined && v !== undefined) {
+          matrix[u][v] = edge.weight;
+          matrix[v][u] = edge.weight;
+        }
+      });
+
+      const totalWeight = primWasm(n, matrix);
+
+      if (totalWeight === -1) {
+        return primTS(nodes, edges);
+      }
+      const tsResult = primTS(nodes, edges);
+      return {
+        ...tsResult,
+        totalWeight,
+      };
+    } catch (error) {
+      if (typeof window !== "undefined") {
+        console.warn("WASM failed, falling back to TypeScript implementation:", error);
+      }
+      return primTS(nodes, edges);
+    }
+  }
+
+  return primTS(nodes, edges);
+}
+
+function primTS(nodes: GraphNode[], edges: GraphEdge[]): PrimResult {
   const mst: MSTEdge[] = [];
   const steps: Array<{ node: string; edge?: MSTEdge; action: "add" | "start" }> = [];
   const visited = new Set<string>();

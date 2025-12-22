@@ -15,7 +15,7 @@ import {
 import { LocationIcon, SitemapIcon, UsersIcon } from "@/components/icons/glass-icons";
 
 const navigation = [
-  { name: "Đồ thị", href: "/", icon: SitemapIcon },
+  // { name: "Đồ thị", href: "/", icon: SitemapIcon },
   { name: "Bản đồ", href: "/map", icon: LocationIcon },
   { name: "Thành viên", href: "/members", icon: UsersIcon },
 ];

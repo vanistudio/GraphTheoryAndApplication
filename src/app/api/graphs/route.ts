@@ -1,24 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import connectDB from "@/lib/db";
-import Graph from "@/lib/models/Graph";
 
 export async function GET() {
-  try {
-    await connectDB();
-
-    const graphs = await Graph.find().sort({ createdAt: -1 });
-
-    return NextResponse.json({ graphs });
-  } catch (error) {
-    console.error("Error fetching graphs:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
+  return NextResponse.json({ graphs: [] }, { status: 200 });
 }
 
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
-
     const body = await request.json();
     const { name, nodes, edges } = body;
 
@@ -29,14 +16,13 @@ export async function POST(request: NextRequest) {
     if (!edges || !Array.isArray(edges)) {
       return NextResponse.json({ error: "Missing required fields: edges must be an array" }, { status: 400 });
     }
-
-    const graph = new Graph({
+    const graph = {
+      _id: `temp_${Date.now()}`,
       name,
       nodes,
       edges,
-    });
-
-    await graph.save();
+      createdAt: new Date(),
+    };
 
     return NextResponse.json({ graph }, { status: 201 });
   } catch (error) {

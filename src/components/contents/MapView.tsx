@@ -12,8 +12,9 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Route, X, Search, MapPin } from "lucide-react";
 import { toast } from "sonner";
-import { dijkstra } from "@/lib/algorithms/dijkstra";
 import { motion, AnimatePresence } from "framer-motion";
+import { dijkstra } from "@/lib/algorithms/dijkstra";
+import { loadWasmModule } from "@/lib/algorithms/wasm-loader";
 
 if (typeof window !== "undefined") {
   delete (L.Icon.Default.prototype as unknown as { _getIconUrl: unknown })._getIconUrl;
@@ -30,6 +31,7 @@ interface MapMarker {
   id: string;
   position: [number, number];
   name: string;
+  type: "shipper" | "delivery";
 }
 
 type MapMode = "light" | "dark" | "satellite";
@@ -65,8 +67,7 @@ function MapStyleUpdater({ mode }: { mode: MapMode }) {
 export default function MapView() {
   const [markers, setMarkers] = useState<MapMarker[]>([]);
   const [mapMode, setMapMode] = useState<MapMode>("light");
-  const [sourceMarker, setSourceMarker] = useState<string>("");
-  const [targetMarker, setTargetMarker] = useState<string>("");
+  const [shipperLocation, setShipperLocation] = useState<string>("");
   const [pathResult, setPathResult] = useState<string[]>([]);
   const [pathDistance, setPathDistance] = useState<number>(0);
   const [pathGeometry, setPathGeometry] = useState<[number, number][]>([]);
@@ -77,9 +78,11 @@ export default function MapView() {
   const [searchResults, setSearchResults] = useState<Array<{ display_name: string; lat: string; lon: string }>>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [newMarkerType, setNewMarkerType] = useState<"shipper" | "delivery">("delivery");
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const searchCacheRef = useRef<Map<string, Array<{ display_name: string; lat: string; lon: string }>>>(new Map());
+  const distanceMatrixRef = useRef<Map<string, number>>(new Map());
 
   const defaultCenter: [number, number] = [10.8231, 106.6297];
   const defaultZoom = 13;
@@ -206,10 +209,19 @@ export default function MapView() {
     const newMarker: MapMarker = {
       id: `marker-${nextMarkerId}`,
       position: [lat, lon],
-      name: result.display_name.split(",")[0] || `Điểm ${nextMarkerId}`,
+      name: result.display_name.split(",")[0] || `${newMarkerType === "shipper" ? "Vị trí shipper" : "Điểm giao hàng"} ${nextMarkerId}`,
+      type: newMarkerType,
     };
+    if (newMarkerType === "shipper") {
+      setMarkers((prev) => {
+        const filtered = prev.filter((m) => m.type !== "shipper");
+        return [...filtered, newMarker];
+      });
+      setShipperLocation(newMarker.id);
+    } else {
+      setMarkers([...markers, newMarker]);
+    }
     
-    setMarkers([...markers, newMarker]);
     setNextMarkerId(nextMarkerId + 1);
     setSearchQuery("");
     setSearchResults([]);
@@ -223,13 +235,16 @@ export default function MapView() {
   };
 
   const deleteMarker = (id: string) => {
+    const marker = markers.find((m) => m.id === id);
     setMarkers(markers.filter((m) => m.id !== id));
-    if (sourceMarker === id) setSourceMarker("");
-    if (targetMarker === id) setTargetMarker("");
+    if (shipperLocation === id) {
+      setShipperLocation("");
+    }
     setPathResult([]);
     setPathDistance(0);
     setPathGeometry([]);
-    toast.success("Đã xóa điểm");
+    distanceMatrixRef.current.clear();
+    toast.success(`Đã xóa ${marker?.type === "shipper" ? "vị trí shipper" : "điểm giao hàng"}`);
   };
 
   const calculateDistance = (pos1: [number, number], pos2: [number, number]): number => {
@@ -293,7 +308,6 @@ export default function MapView() {
       if (!apiKey) {
         return null;
       }
-
       try {
         const url = `https://api.openrouteservice.org/v2/directions/driving-car`;
         const body = {
@@ -361,7 +375,6 @@ export default function MapView() {
         return null;
       }
     };
-
     const tryOSRM = async (): Promise<{ geometry: [number, number][]; distance: number } | null> => {
       try {
         const url = `https://router.project-osrm.org/route/v1/driving/${coordinates.map(([lat, lon]) => `${lon},${lat}`).join(";")}?overview=full&geometries=geojson&steps=false`;
@@ -415,29 +428,262 @@ export default function MapView() {
     console.log("Both APIs failed, returning null");
     return null;
   };
-
-  const getRoadDistance = async (pos1: [number, number], pos2: [number, number]): Promise<number> => {
-    const route = await getRoadRoute([pos1, pos2]);
-    if (route) {
-      return route.distance;
+  const getRoadDistance = async (pos1: [number, number], pos2: [number, number], useCache: boolean = true): Promise<number> => {
+    const key = `${pos1[0]},${pos1[1]}-${pos2[0]},${pos2[1]}`;
+    const reverseKey = `${pos2[0]},${pos2[1]}-${pos1[0]},${pos1[1]}`;
+    
+    if (useCache) {
+      if (distanceMatrixRef.current.has(key)) {
+        return distanceMatrixRef.current.get(key)!;
+      }
+      if (distanceMatrixRef.current.has(reverseKey)) {
+        return distanceMatrixRef.current.get(reverseKey)!;
+      }
     }
-    return calculateDistance(pos1, pos2);
+    
+    const route = await getRoadRoute([pos1, pos2]);
+    const distance = route ? route.distance : calculateDistance(pos1, pos2);
+    
+    if (useCache) {
+      distanceMatrixRef.current.set(key, distance);
+      distanceMatrixRef.current.set(reverseKey, distance);
+    }
+    
+    return distance;
+  };
+  const buildDistanceMatrix = (
+    points: Array<{ id: string; position: [number, number] }>,
+    distanceCache: Map<string, number>
+  ): number[][] => {
+    const n = points.length;
+    const matrix: number[][] = Array(n).fill(null).map(() => Array(n).fill(Infinity));
+    
+    for (let i = 0; i < n; i++) {
+      matrix[i][i] = 0;
+      for (let j = i + 1; j < n; j++) {
+        const key = `${points[i].position[0]},${points[i].position[1]}-${points[j].position[0]},${points[j].position[1]}`;
+        const reverseKey = `${points[j].position[0]},${points[j].position[1]}-${points[i].position[0]},${points[i].position[1]}`;
+        const dist = distanceCache.get(key) || distanceCache.get(reverseKey) || Infinity;
+        matrix[i][j] = dist;
+        matrix[j][i] = dist;
+      }
+    }
+    
+    return matrix;
+  };
+  const calculateRouteDistance = (
+    route: number[],
+    distanceMatrix: number[][]
+  ): number => {
+    if (route.length < 2) return 0;
+    let total = 0;
+    for (let i = 0; i < route.length - 1; i++) {
+      total += distanceMatrix[route[i]][route[i + 1]];
+    }
+    return total;
+  };
+  const nearestNeighborRoute = (
+    startIndex: number,
+    deliveryIndices: number[],
+    distanceMatrix: number[][],
+    points: Array<{ id: string; position: [number, number] }>
+  ): { route: string[]; distance: number } => {
+    const route: number[] = [startIndex];
+    const visited = new Set<number>([startIndex]);
+    const remaining = [...deliveryIndices];
+    let currentIndex = startIndex;
+    
+    while (remaining.length > 0) {
+      let nearestIdx = -1;
+      let nearestDistance = Infinity;
+      
+      for (let i = 0; i < remaining.length; i++) {
+        const targetIndex = remaining[i];
+        const dist = distanceMatrix[currentIndex][targetIndex];
+        
+        if (dist < nearestDistance) {
+          nearestDistance = dist;
+          nearestIdx = i;
+        }
+      }
+      
+      if (nearestIdx === -1) break;
+      
+      const nearestIndex = remaining[nearestIdx];
+      route.push(nearestIndex);
+      visited.add(nearestIndex);
+      currentIndex = nearestIndex;
+      remaining.splice(nearestIdx, 1);
+    }
+    
+    const distance = calculateRouteDistance(route, distanceMatrix);
+    return {
+      route: route.slice(1).map(idx => points[idx].id),
+      distance
+    };
+  };
+  const twoOptImprovement = (
+    route: number[],
+    distanceMatrix: number[][]
+  ): number[] => {
+    let improved = true;
+    let bestRoute = [...route];
+    let bestDistance = calculateRouteDistance(bestRoute, distanceMatrix);
+    
+    while (improved) {
+      improved = false;
+      
+      for (let i = 1; i < bestRoute.length - 1; i++) {
+        for (let j = i + 1; j < bestRoute.length; j++) {
+          const newRoute = [
+            ...bestRoute.slice(0, i),
+            ...bestRoute.slice(i, j + 1).reverse(),
+            ...bestRoute.slice(j + 1)
+          ];
+          
+          const newDistance = calculateRouteDistance(newRoute, distanceMatrix);
+          
+          if (newDistance < bestDistance) {
+            bestRoute = newRoute;
+            bestDistance = newDistance;
+            improved = true;
+            break;
+          }
+        }
+        if (improved) break;
+      }
+    }
+    
+    return bestRoute;
+  };
+  const optimizeRouteWithDijkstra = async (
+    shipperIndex: number,
+    deliveryIndices: number[],
+    points: Array<{ id: string; position: [number, number] }>,
+    distanceMatrix: number[][]
+  ): Promise<string[]> => {
+    if (deliveryIndices.length === 0) return [];
+    const sortedDeliveryIndices = [...deliveryIndices].sort((a, b) => 
+      points[a].id.localeCompare(points[b].id)
+    );
+    
+    try {
+      await loadWasmModule();
+    } catch (error) {
+      console.warn("Failed to load WASM, using fallback:", error);
+      return optimizeRouteFallback(shipperIndex, sortedDeliveryIndices, distanceMatrix, points);
+    }
+    let bestRoute: string[] = [];
+    let bestDistance = Infinity;
+    const routeFromShipper = nearestNeighborRoute(
+      shipperIndex,
+      sortedDeliveryIndices,
+      distanceMatrix,
+      points
+    );
+    
+    if (routeFromShipper.distance < bestDistance) {
+      bestRoute = routeFromShipper.route;
+      bestDistance = routeFromShipper.distance;
+    }
+    if (sortedDeliveryIndices.length > 1) {
+      for (const firstDeliveryIdx of sortedDeliveryIndices.slice(0, Math.min(5, sortedDeliveryIndices.length))) {
+        const remaining = sortedDeliveryIndices.filter(idx => idx !== firstDeliveryIdx);
+        const partialRoute = nearestNeighborRoute(
+          firstDeliveryIdx,
+          remaining,
+          distanceMatrix,
+          points
+        );
+        const totalDistance = distanceMatrix[shipperIndex][firstDeliveryIdx] + partialRoute.distance;
+        
+        if (totalDistance < bestDistance) {
+          bestRoute = [points[firstDeliveryIdx].id, ...partialRoute.route];
+          bestDistance = totalDistance;
+        }
+      }
+    }
+    if (bestRoute.length > 2) {
+      const routeIndices = [shipperIndex, ...bestRoute.map(id => {
+        const idx = points.findIndex(p => p.id === id);
+        return idx >= 0 ? idx : -1;
+      }).filter(idx => idx >= 0)];
+      
+      const improvedIndices = twoOptImprovement(routeIndices, distanceMatrix);
+      bestRoute = improvedIndices.slice(1).map(idx => points[idx].id);
+    }
+    
+    return bestRoute;
+  };
+  const optimizeRouteFallback = (
+    shipperIndex: number,
+    deliveryIndices: number[],
+    distanceMatrix: number[][],
+    points: Array<{ id: string; position: [number, number] }>
+  ): string[] => {
+    const sortedDeliveryIndices = [...deliveryIndices].sort((a, b) => 
+      points[a].id.localeCompare(points[b].id)
+    );
+    let bestRoute: string[] = [];
+    let bestDistance = Infinity;
+    const routeFromShipper = nearestNeighborRoute(
+      shipperIndex,
+      sortedDeliveryIndices,
+      distanceMatrix,
+      points
+    );
+    
+    if (routeFromShipper.distance < bestDistance) {
+      bestRoute = routeFromShipper.route;
+      bestDistance = routeFromShipper.distance;
+    }
+    if (sortedDeliveryIndices.length > 1) {
+      for (const firstDeliveryIdx of sortedDeliveryIndices.slice(0, Math.min(5, sortedDeliveryIndices.length))) {
+        const remaining = sortedDeliveryIndices.filter(idx => idx !== firstDeliveryIdx);
+        const partialRoute = nearestNeighborRoute(
+          firstDeliveryIdx,
+          remaining,
+          distanceMatrix,
+          points
+        );
+        
+        const totalDistance = distanceMatrix[shipperIndex][firstDeliveryIdx] + partialRoute.distance;
+        
+        if (totalDistance < bestDistance) {
+          bestRoute = [points[firstDeliveryIdx].id, ...partialRoute.route];
+          bestDistance = totalDistance;
+        }
+      }
+    }
+    if (bestRoute.length > 2) {
+      const routeIndices = [shipperIndex, ...bestRoute.map(id => {
+        const idx = points.findIndex(p => p.id === id);
+        return idx >= 0 ? idx : -1;
+      }).filter(idx => idx >= 0)];
+      
+      const improvedIndices = twoOptImprovement(routeIndices, distanceMatrix);
+      bestRoute = improvedIndices.slice(1).map(idx => points[idx].id);
+    }
+    
+    return bestRoute;
   };
 
 
   const handleRunAlgorithm = async () => {
-    if (!sourceMarker || !targetMarker) {
-      toast.error("Vui lòng chọn điểm nguồn và điểm đích");
+    if (!shipperLocation) {
+      toast.error("Vui lòng thêm vị trí shipper");
       return;
     }
 
-    if (sourceMarker === targetMarker) {
-      toast.error("Điểm nguồn và điểm đích phải khác nhau");
+    const deliveryMarkers = markers.filter((m) => m.type === "delivery");
+    if (deliveryMarkers.length === 0) {
+      toast.error("Vui lòng thêm ít nhất một địa điểm giao hàng");
       return;
     }
 
-    if (markers.length < 2) {
-      toast.error("Cần ít nhất 2 điểm để chạy thuật toán");
+    const shipperMarker = markers.find((m) => m.id === shipperLocation);
+    if (!shipperMarker) {
+      toast.error("Không tìm thấy vị trí shipper");
       return;
     }
 
@@ -446,27 +692,22 @@ export default function MapView() {
     setPathGeometry([]);
 
     try {
-      const graphNodes = markers.map((marker) => ({
-        id: marker.id,
-        label: marker.name,
-        position: { x: marker.position[1], y: marker.position[0] },
-      }));
-
-      const graphEdges: Array<{ id: string; source: string; target: string; weight: number }> = [];
-      
-      const totalPairs = (markers.length * (markers.length - 1)) / 2;
+      const allPoints = [shipperMarker, ...deliveryMarkers];
+      const totalPairs = (allPoints.length * (allPoints.length - 1)) / 2;
       let processedPairs = 0;
       
       if (totalPairs > 0) {
         toast.loading(`Đang tính khoảng cách đường bộ (0/${totalPairs})...`, { id: "road-distance" });
       }
       
-      for (let i = 0; i < markers.length; i++) {
-        for (let j = i + 1; j < markers.length; j++) {
-          const fromMarker = markers[i];
-          const toMarker = markers[j];
+      distanceMatrixRef.current.clear();
+      
+      for (let i = 0; i < allPoints.length; i++) {
+        for (let j = i + 1; j < allPoints.length; j++) {
+          const fromMarker = allPoints[i];
+          const toMarker = allPoints[j];
           
-          const weight = await getRoadDistance(fromMarker.position, toMarker.position);
+          await getRoadDistance(fromMarker.position, toMarker.position, true);
           processedPairs++;
           if (totalPairs > 5) {
             toast.loading(
@@ -474,67 +715,99 @@ export default function MapView() {
               { id: "road-distance" }
             );
           }
-          
-          graphEdges.push({
-            id: `${fromMarker.id}-${toMarker.id}`,
-            source: fromMarker.id,
-            target: toMarker.id,
-            weight: Math.round(weight * 100) / 100,
-          });
-          graphEdges.push({
-            id: `${toMarker.id}-${fromMarker.id}`,
-            source: toMarker.id,
-            target: fromMarker.id,
-            weight: Math.round(weight * 100) / 100,
-          });
         }
       }
       
       toast.dismiss("road-distance");
+      const pointIndexMap = new Map<string, number>();
+      allPoints.forEach((point, index) => {
+        pointIndexMap.set(point.id, index);
+      });
+      toast.loading("Đang tối ưu tuyến đường...", { id: "optimize-route" });
+      const distanceMatrix = buildDistanceMatrix(
+        allPoints.map((p) => ({ id: p.id, position: p.position })),
+        distanceMatrixRef.current
+      );
+      const shipperIndex = pointIndexMap.get(shipperLocation)!;
+      const deliveryIndices = deliveryMarkers.map((m) => pointIndexMap.get(m.id)!);
+      
+      const optimizedRoute = await optimizeRouteWithDijkstra(
+        shipperIndex,
+        deliveryIndices,
+        allPoints.map((p) => ({ id: p.id, position: p.position })),
+        distanceMatrix
+      );
 
-      const dijkstraResult = await dijkstra(graphNodes, graphEdges, sourceMarker, targetMarker);
-        const result = {
-          path: dijkstraResult.path,
-          distance: dijkstraResult.distance,
-        };
+      toast.dismiss("optimize-route");
+      const fullRoute = [shipperLocation, ...optimizedRoute];
+      setPathResult(fullRoute);
+      let totalDistance = 0;
+      const allPathCoordinates: [number, number][] = [shipperMarker.position];
+      toast.loading("Đang tính toán đường đi chi tiết...", { id: "road-route" });
+      const graphNodes = allPoints.map((marker) => ({
+        id: marker.id,
+        label: marker.name,
+        position: { x: marker.position[1], y: marker.position[0] },
+      }));
 
-        if (result && result.path.length > 0) {
-          setPathResult(result.path);
+      const graphEdges: Array<{ id: string; source: string; target: string; weight: number }> = [];
+      for (let i = 0; i < allPoints.length; i++) {
+        for (let j = i + 1; j < allPoints.length; j++) {
+          const key = `${allPoints[i].position[0]},${allPoints[i].position[1]}-${allPoints[j].position[0]},${allPoints[j].position[1]}`;
+          const reverseKey = `${allPoints[j].position[0]},${allPoints[j].position[1]}-${allPoints[i].position[0]},${allPoints[i].position[1]}`;
+          const weight = distanceMatrixRef.current.get(key) || distanceMatrixRef.current.get(reverseKey) || Infinity;
           
-          const pathCoordinates = result.path.map((id) => {
+          if (weight !== Infinity) {
+            graphEdges.push({
+              id: `${allPoints[i].id}-${allPoints[j].id}`,
+              source: allPoints[i].id,
+              target: allPoints[j].id,
+              weight: weight,
+            });
+            graphEdges.push({
+              id: `${allPoints[j].id}-${allPoints[i].id}`,
+              source: allPoints[j].id,
+              target: allPoints[i].id,
+              weight: weight,
+            });
+          }
+        }
+      }
+      let currentPointId = shipperLocation;
+      for (const nextPointId of optimizedRoute) {
+        const dijkstraResult = await dijkstra(graphNodes, graphEdges, currentPointId, nextPointId);
+        
+        if (dijkstraResult.path.length > 0) {
+          totalDistance += dijkstraResult.distance;
+          const pathCoords = dijkstraResult.path.map((id) => {
             const marker = markers.find((m) => m.id === id);
             return marker ? marker.position : null;
           }).filter((pos): pos is [number, number] => pos !== null);
           
-          if (pathCoordinates.length >= 2) {
-            toast.loading("Đang lấy đường đi thực tế...", { id: "road-route" });
-            const roadRoute = await getRoadRoute(pathCoordinates);
-            toast.dismiss("road-route");
-            
-            if (roadRoute && roadRoute.geometry && roadRoute.geometry.length >= 2 && roadRoute.distance > 0) {
-              setPathGeometry(roadRoute.geometry);
-              setPathDistance(roadRoute.distance);
-              toast.success(`Tìm thấy đường đi: ${roadRoute.distance.toFixed(2)} km`);
+          if (pathCoords.length >= 2) {
+            const segmentRoute = await getRoadRoute(pathCoords);
+            if (segmentRoute && segmentRoute.geometry && segmentRoute.geometry.length > 0) {
+              allPathCoordinates.push(...segmentRoute.geometry.slice(1));
             } else {
-              const fallbackDistance = pathCoordinates.reduce((sum, coord, idx) => {
-                if (idx === 0) return 0;
-                return sum + calculateDistance(pathCoordinates[idx - 1], coord);
-              }, 0);
-              setPathGeometry(pathCoordinates);
-              setPathDistance(fallbackDistance);
-              toast.success(`Tìm thấy đường đi: ${fallbackDistance.toFixed(2)} km (khoảng cách đường chim bay)`);
+              allPathCoordinates.push(pathCoords[pathCoords.length - 1]);
             }
-          } else {
-            setPathGeometry([]);
-            setPathDistance(result.distance);
-            toast.success(`Tìm thấy đường đi: ${result.distance.toFixed(2)} km`);
           }
-        } else {
-          setPathResult([]);
-          setPathDistance(0);
-          setPathGeometry([]);
-          toast.error("Không tìm thấy đường đi");
+          
+          currentPointId = nextPointId;
         }
+      }
+      
+      toast.dismiss("road-route");
+
+      if (allPathCoordinates.length >= 2) {
+        setPathGeometry(allPathCoordinates);
+        setPathDistance(totalDistance);
+        toast.success(`Lịch trình tối ưu: ${totalDistance.toFixed(2)} km (${deliveryMarkers.length} điểm giao hàng)`);
+      } else {
+        setPathGeometry([]);
+        setPathDistance(totalDistance);
+        toast.success(`Lịch trình tối ưu: ${totalDistance.toFixed(2)} km`);
+      }
     } catch (error) {
       console.error("Error running algorithm:", error);
       toast.error("Lỗi khi chạy thuật toán");
@@ -546,7 +819,6 @@ export default function MapView() {
   return (
     <div className="h-[calc(100vh-120px)] flex flex-col gap-4">
       <div className="flex flex-col lg:grid lg:grid-cols-4 gap-4 h-full">
-        {/* Control Panel */}
         <div className="lg:col-span-1 space-y-4">
           <Card className={`border border-border ${customButtonShadow}`}>
             <CardHeader>
@@ -555,12 +827,23 @@ export default function MapView() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Tìm kiếm địa chỉ</Label>
+                <div className="space-y-2">
+                  <Select value={newMarkerType} onValueChange={(value) => setNewMarkerType(value as "shipper" | "delivery")}>
+                    <SelectTrigger className={`w-full text-sm ${customButtonShadow}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="shipper">Vị trí shipper</SelectItem>
+                      <SelectItem value="delivery">Điểm giao hàng</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="relative search-container">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       type="text"
-                      placeholder="Nhập địa chỉ để tìm kiếm..."
+                      placeholder={`Nhập địa chỉ ${newMarkerType === "shipper" ? "shipper" : "giao hàng"}...`}
                       value={searchQuery}
                       onChange={(e) => handleSearchChange(e.target.value)}
                       onFocus={() => {
@@ -621,65 +904,66 @@ export default function MapView() {
 
               <Separator />
 
-              <Separator />
-
               <div className="space-y-3">
-                <Label className="text-sm font-medium">Tìm đường đi</Label>
+                <Label className="text-sm font-medium">Tối ưu lịch trình giao hàng</Label>
                 <div className="space-y-2">
                   <div>
-                    <Label className="text-xs text-muted-foreground mb-1.5 block">Điểm nguồn</Label>
-                    <Select value={sourceMarker} onValueChange={setSourceMarker}>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">Vị trí shipper</Label>
+                    <Select value={shipperLocation} onValueChange={setShipperLocation}>
                       <SelectTrigger className={`w-full text-sm ${customButtonShadow}`}>
-                        <SelectValue placeholder="Chọn điểm nguồn" />
+                        <SelectValue placeholder="Chọn vị trí shipper" />
                       </SelectTrigger>
                       <SelectContent>
-                        {markers.map((marker) => (
+                        {markers.filter((m) => m.type === "shipper").map((marker) => (
                           <SelectItem key={marker.id} value={marker.id}>
                             {marker.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground mb-1.5 block">Điểm đích</Label>
-                    <Select value={targetMarker} onValueChange={setTargetMarker}>
-                      <SelectTrigger className={`w-full text-sm ${customButtonShadow}`}>
-                        <SelectValue placeholder="Chọn điểm đích" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {markers.map((marker) => (
-                          <SelectItem key={marker.id} value={marker.id}>
-                            {marker.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {markers.filter((m) => m.type === "shipper").length === 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Chưa có vị trí shipper. Hãy thêm từ tìm kiếm phía trên.
+                      </p>
+                    )}
                   </div>
                   <Button
                     onClick={handleRunAlgorithm}
                     disabled={
                       isRunning || 
-                      markers.length < 2 ||
-                      (!sourceMarker || !targetMarker)
+                      !shipperLocation ||
+                      markers.filter((m) => m.type === "delivery").length === 0
                     }
                     className={`w-full ${customButtonShadow}`}
                   >
                     <Route className="h-4 w-4 mr-2" />
-                    {isRunning ? "Đang tính toán..." : "Tìm đường đi"}
+                    {isRunning ? "Đang tối ưu..." : "Tối ưu lịch trình"}
                   </Button>
                 </div>
               </div>
 
               {pathResult.length > 0 && (
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Kết quả</Label>
+                  <Label className="text-sm font-medium">Kết quả tối ưu</Label>
                   <Card className={`p-3 border border-border bg-muted/50 ${customButtonShadow}`}>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">Khoảng cách: {pathDistance.toFixed(2)} km</p>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Tổng khoảng cách: {pathDistance.toFixed(2)} km</p>
                       <p className="text-xs text-muted-foreground">
-                        Số điểm: {pathResult.length}
+                        Số điểm giao hàng: {markers.filter((m) => m.type === "delivery").length}
                       </p>
+                      <div className="mt-2 pt-2 border-t border-border">
+                        <p className="text-xs font-medium mb-1">Thứ tự giao hàng:</p>
+                        <ol className="text-xs text-muted-foreground space-y-0.5 list-decimal list-inside">
+                          {pathResult.slice(1, -1).map((id, idx) => {
+                            const marker = markers.find((m) => m.id === id);
+                            return marker ? (
+                              <li key={id} className="truncate">
+                                {idx + 1}. {marker.name}
+                              </li>
+                            ) : null;
+                          })}
+                        </ol>
+                      </div>
                     </div>
                   </Card>
                 </div>
@@ -688,8 +972,16 @@ export default function MapView() {
               <Separator />
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Điểm đã thêm ({markers.length})</Label>
-                <div className="space-y-2 lg:max-h-48">
+                <Label className="text-sm font-medium">
+                  Điểm đã thêm ({markers.length})
+                  {markers.filter((m) => m.type === "shipper").length > 0 && (
+                    <span className="text-xs text-muted-foreground ml-1">
+                      (Shipper: {markers.filter((m) => m.type === "shipper").length}, 
+                      Giao hàng: {markers.filter((m) => m.type === "delivery").length})
+                    </span>
+                  )}
+                </Label>
+                <div className="space-y-2 lg:max-h-48 overflow-y-auto">
                   <AnimatePresence>
                     {markers.map((marker) => (
                       <motion.div
@@ -698,10 +990,22 @@ export default function MapView() {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -10 }}
                       >
-                        <Card className={`p-2 border border-border ${customButtonShadow}`}>
+                        <Card className={`p-2 border border-border ${marker.type === "shipper" ? "bg-green-50 dark:bg-green-950/20" : ""} ${customButtonShadow}`}>
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{marker.name}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-sm font-medium truncate">{marker.name}</p>
+                                {marker.type === "shipper" && (
+                                  <span className="text-xs px-1.5 py-0.5 bg-green-500 text-white rounded">
+                                    Shipper
+                                  </span>
+                                )}
+                                {marker.type === "delivery" && (
+                                  <span className="text-xs px-1.5 py-0.5 bg-blue-500 text-white rounded">
+                                    Giao hàng
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-xs text-muted-foreground">
                                 {marker.position[0].toFixed(4)}, {marker.position[1].toFixed(4)}
                               </p>
@@ -723,9 +1027,9 @@ export default function MapView() {
               </div>
 
               <div className="text-xs text-muted-foreground space-y-1 pt-2">
-                <p>• Tìm kiếm địa chỉ để thêm điểm</p>
-                <p>• Chọn 2 điểm và chạy thuật toán để tìm đường đi</p>
-                <p>• Khoảng cách được tính tự động</p>
+                <p>• Chọn loại điểm (Shipper/Giao hàng) trước khi tìm kiếm</p>
+                <p>• Thêm vị trí shipper và các điểm giao hàng</p>
+                <p>• Chạy thuật toán để tối ưu lịch trình giao hàng</p>
               </div>
             </CardContent>
           </Card>
@@ -772,27 +1076,27 @@ export default function MapView() {
 
             {markers.map((marker) => {
               const isInPath = pathResult.includes(marker.id);
-              const isSource = marker.id === sourceMarker;
-              const isTarget = marker.id === targetMarker;
+              const isShipper = marker.id === shipperLocation;
+              const pathIndex = pathResult.indexOf(marker.id);
               let backgroundColor = "#ffffff";
               let borderColor = "#000000";
               let textColor = "#000000";
               let label = "";
               
-              if (isSource) {
+              if (isShipper) {
                 backgroundColor = "#22c55e";
                 borderColor = "#16a34a";
                 textColor = "#ffffff";
                 label = "S";
-              } else if (isTarget) {
-                backgroundColor = "#ef4444";
-                borderColor = "#dc2626";
-                textColor = "#ffffff";
-                label = "T";
-              } else if (isInPath) {
+              } else if (isInPath && pathIndex > 0 && pathIndex < pathResult.length - 1) {
                 backgroundColor = "#3b82f6";
                 borderColor = "#2563eb";
                 textColor = "#ffffff";
+                label = String(pathIndex);
+              } else if (marker.type === "delivery") {
+                backgroundColor = "#fbbf24";
+                borderColor = "#f59e0b";
+                textColor = "#000000";
               }
               
               const icon = L.divIcon({

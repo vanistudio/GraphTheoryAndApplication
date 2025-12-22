@@ -4,7 +4,7 @@ interface WasmModule {
     returnType: string,
     argTypes: string[],
     args: unknown[]
-  ) => void;
+  ) => number | void;
   cwrap: (
     funcName: string,
     returnType: string,
@@ -95,7 +95,8 @@ export function dijkstraWasm(
 
     const result = new Array(n);
     for (let i = 0; i < n; i++) {
-      result[i] = wasmModule.HEAPF64[resultPtr / 8 + i];
+      const val = wasmModule.HEAPF64[resultPtr / 8 + i];
+      result[i] = val >= 1e18 ? Infinity : val;
     }
 
     return result;
@@ -139,12 +140,13 @@ export function bellmanFordWasm(
       "bellman_ford_wasm",
       "null",
       ["number", "number", "number", "number", "number", "number", "number"],
-      [n, src + 1, edgeCount, edgesUPtr, edgesVPtr, edgesWPtr, resultPtr]
+      [n, src, edgeCount, edgesUPtr, edgesVPtr, edgesWPtr, resultPtr]
     );
 
     const result = new Array(n);
     for (let i = 0; i < n; i++) {
-      result[i] = wasmModule.HEAPF64[resultPtr / 8 + i];
+      const val = wasmModule.HEAPF64[resultPtr / 8 + i];
+      result[i] = val >= 1e18 ? Infinity : val;
     }
 
     return result;
@@ -153,6 +155,115 @@ export function bellmanFordWasm(
     wasmModule._free(edgesVPtr);
     wasmModule._free(edgesWPtr);
     wasmModule._free(resultPtr);
+  }
+}
+
+export function hasNegativeWeightWasm(
+  n: number,
+  matrix: number[][]
+): boolean {
+  if (!wasmModule) {
+    throw new Error("WASM module not loaded");
+  }
+
+  const flatMatrix = new Float64Array(n * n);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      flatMatrix[i * n + j] = matrix[i][j] || 0;
+    }
+  }
+
+  const matrixPtr = wasmModule._malloc(flatMatrix.length * 8);
+
+  try {
+    wasmModule.HEAPF64.set(flatMatrix, matrixPtr / 8);
+
+    const result = wasmModule.ccall(
+      "has_negative_weight_wasm",
+      "number",
+      ["number", "number"],
+      [n, matrixPtr]
+    ) as number;
+
+    return result === 1;
+  } finally {
+    wasmModule._free(matrixPtr);
+  }
+}
+
+export function kruskalWasm(
+  n: number,
+  edges: Array<{ u: number; v: number; w: number }>
+): number {
+  if (!wasmModule) {
+    throw new Error("WASM module not loaded");
+  }
+
+  const edgeCount = edges.length;
+  const edgesU = new Int32Array(edgeCount);
+  const edgesV = new Int32Array(edgeCount);
+  const edgesW = new Float64Array(edgeCount);
+
+  edges.forEach((edge, i) => {
+    edgesU[i] = edge.u + 1;
+    edgesV[i] = edge.v + 1;
+    edgesW[i] = edge.w;
+  });
+
+  const edgesUPtr = wasmModule._malloc(edgeCount * 4);
+  const edgesVPtr = wasmModule._malloc(edgeCount * 4);
+  const edgesWPtr = wasmModule._malloc(edgeCount * 8);
+
+  try {
+    wasmModule.HEAP32.set(edgesU, edgesUPtr / 4);
+    wasmModule.HEAP32.set(edgesV, edgesVPtr / 4);
+    wasmModule.HEAPF64.set(edgesW, edgesWPtr / 8);
+
+    const result = wasmModule.ccall(
+      "kruskal_wasm",
+      "number",
+      ["number", "number", "number", "number", "number"],
+      [n, edgeCount, edgesUPtr, edgesVPtr, edgesWPtr]
+    ) as number;
+
+    return result === -1 ? -1 : result;
+  } finally {
+    wasmModule._free(edgesUPtr);
+    wasmModule._free(edgesVPtr);
+    wasmModule._free(edgesWPtr);
+  }
+}
+
+export function primWasm(
+  n: number,
+  matrix: number[][]
+): number {
+  if (!wasmModule) {
+    throw new Error("WASM module not loaded");
+  }
+
+  const flatMatrix = new Float64Array(n * n);
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      flatMatrix[i * n + j] = matrix[i][j] || 0;
+    }
+  }
+
+  const matrixPtr = wasmModule._malloc(flatMatrix.length * 8);
+
+  try {
+    wasmModule.HEAPF64.set(flatMatrix, matrixPtr / 8);
+
+    const result = wasmModule.ccall(
+      "prim_wasm",
+      "number",
+      ["number", "number"],
+      [n, matrixPtr]
+    ) as number;
+
+    return result === -1 ? -1 : result;
+  } finally {
+    wasmModule._free(matrixPtr);
   }
 }
 
