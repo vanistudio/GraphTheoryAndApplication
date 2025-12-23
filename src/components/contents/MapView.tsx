@@ -107,8 +107,6 @@ export default function MapView() {
 
   const defaultCenter: [number, number] = [10.8231, 106.6297];
   const defaultZoom = 13;
-
-  // Load lịch sử và API keys từ localStorage khi component mount
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
@@ -117,14 +115,11 @@ export default function MapView() {
           const parsed = JSON.parse(savedHistory);
           setHistory(parsed);
         }
-        
-        // Load API keys
         const savedApiKeys = localStorage.getItem("openrouteservice-api-keys");
         if (savedApiKeys) {
           const parsed = JSON.parse(savedApiKeys);
           setApiKeys(parsed);
         } else {
-          // Nếu chưa có, thử lấy từ env
           const envKey = process.env.NEXT_PUBLIC_OPENROUTESERVICE_API_KEY;
           if (envKey) {
             setApiKeys([envKey]);
@@ -136,17 +131,12 @@ export default function MapView() {
       }
     }
   }, []);
-
-  // Lưu API keys vào localStorage khi thay đổi
   useEffect(() => {
     if (typeof window !== "undefined" && apiKeys.length > 0) {
       localStorage.setItem("openrouteservice-api-keys", JSON.stringify(apiKeys));
     }
   }, [apiKeys]);
-
-  // Lấy API key tiếp theo (xoay vòng)
   const getNextApiKey = (): string | null => {
-    // Lấy danh sách keys (từ state hoặc env)
     const allKeys = apiKeys.length > 0 
       ? apiKeys 
       : (process.env.NEXT_PUBLIC_OPENROUTESERVICE_API_KEY ? [process.env.NEXT_PUBLIC_OPENROUTESERVICE_API_KEY] : []);
@@ -154,34 +144,24 @@ export default function MapView() {
     if (allKeys.length === 0) {
       return null;
     }
-    
-    // Lọc bỏ các key bị rate limit
     const availableKeys = allKeys.filter(key => !rateLimitedKeysRef.current.has(key));
     
     if (availableKeys.length === 0) {
-      // Nếu tất cả đều bị rate limit, reset và thử lại với tất cả keys
       rateLimitedKeysRef.current.clear();
       const key = allKeys[currentApiKeyIndexRef.current % allKeys.length];
       currentApiKeyIndexRef.current = (currentApiKeyIndexRef.current + 1) % allKeys.length;
       return key;
     }
-    
-    // Xoay vòng trong các key khả dụng
     const key = availableKeys[currentApiKeyIndexRef.current % availableKeys.length];
     currentApiKeyIndexRef.current = (currentApiKeyIndexRef.current + 1) % availableKeys.length;
     return key;
   };
-
-  // Đánh dấu API key bị rate limit
   const markKeyAsRateLimited = (key: string) => {
     rateLimitedKeysRef.current.add(key);
-    // Tự động reset sau 1 phút (có thể API đã reset rate limit)
     setTimeout(() => {
       rateLimitedKeysRef.current.delete(key);
     }, 60000);
   };
-
-  // Thêm API key
   const addApiKey = (key: string) => {
     if (key.trim() && !apiKeys.includes(key.trim())) {
       setApiKeys([...apiKeys, key.trim()]);
@@ -191,15 +171,11 @@ export default function MapView() {
       toast.error("API key đã tồn tại");
     }
   };
-
-  // Xóa API key
   const removeApiKey = (key: string) => {
     setApiKeys(apiKeys.filter(k => k !== key));
     rateLimitedKeysRef.current.delete(key);
     toast.success("Đã xóa API key");
   };
-
-  // Lưu lịch sử vào localStorage
   const saveToHistory = (markers: MapMarker[], numShippers: number, conflictRadius: number, result?: {
     pathResult: Map<number, string[]>;
     pathDistance: Map<number, number>;
@@ -219,7 +195,7 @@ export default function MapView() {
         } : undefined,
       };
 
-      const newHistory = [historyItem, ...history].slice(0, 50); // Giữ tối đa 50 lịch sử
+      const newHistory = [historyItem, ...history].slice(0, 50); 
       setHistory(newHistory);
       localStorage.setItem("shipper-history", JSON.stringify(newHistory));
       toast.success("Đã lưu vào lịch sử");
@@ -228,8 +204,6 @@ export default function MapView() {
       toast.error("Lỗi khi lưu lịch sử");
     }
   };
-
-  // Tải lại từ lịch sử
   const loadFromHistory = (historyItem: typeof history[0]) => {
     setMarkers(historyItem.markers);
     setNumShippers(historyItem.numShippers);
@@ -245,14 +219,10 @@ export default function MapView() {
       setPathDistance(new Map());
       setPathGeometry(new Map());
     }
-
-    // Tìm shipper đầu tiên làm mặc định
     const firstShipper = historyItem.markers.find(m => m.type === "shipper");
     if (firstShipper) {
       setShipperLocation(firstShipper.id);
     }
-
-    // Tính nextMarkerId
     const maxId = historyItem.markers.reduce((max, m) => {
       const match = m.id.match(/marker-(\d+)/);
       if (match) {
@@ -266,8 +236,6 @@ export default function MapView() {
     setShowHistory(false);
     toast.success("Đã tải lại từ lịch sử");
   };
-
-  // Xóa lịch sử
   const deleteHistory = (id: string) => {
     const newHistory = history.filter(h => h.id !== id);
     setHistory(newHistory);
@@ -276,8 +244,6 @@ export default function MapView() {
     }
     toast.success("Đã xóa khỏi lịch sử");
   };
-
-  // Xuất lịch sử ra file JSON
   const exportHistory = () => {
     try {
       const dataStr = JSON.stringify(history, null, 2);
@@ -296,8 +262,6 @@ export default function MapView() {
       toast.error("Lỗi khi xuất lịch sử");
     }
   };
-
-  // Nhập lịch sử từ file JSON
   const importHistory = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -409,7 +373,6 @@ export default function MapView() {
       setIsSearching(false);
     }
   };
-
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
     
@@ -438,7 +401,6 @@ export default function MapView() {
       setShowSuggestions(false);
     }
   };
-
   const handleSelectResult = (result: { display_name: string; lat: string; lon: string }) => {
     const lat = parseFloat(result.lat);
     const lon = parseFloat(result.lon);
@@ -449,15 +411,10 @@ export default function MapView() {
       name: result.display_name.split(",")[0] || `${newMarkerType === "shipper" ? "Vị trí shipper" : "Điểm giao hàng"} ${nextMarkerId}`,
       type: newMarkerType,
     };
-    
-    // Cho phép thêm nhiều shipper
     setMarkers([...markers, newMarker]);
-    
-    // Nếu là shipper đầu tiên, tự động chọn làm shipper location mặc định
     if (newMarkerType === "shipper" && !shipperLocation) {
       setShipperLocation(newMarker.id);
     }
-    
     setNextMarkerId(nextMarkerId + 1);
     setSearchQuery("");
     setSearchResults([]);
@@ -474,8 +431,6 @@ export default function MapView() {
     const marker = markers.find((m) => m.id === id);
     const newMarkers = markers.filter((m) => m.id !== id);
     setMarkers(newMarkers);
-    
-    // Nếu xóa shipper được chọn, tự động chọn shipper khác nếu còn
     if (shipperLocation === id) {
       const remainingShippers = newMarkers.filter((m) => m.type === "shipper");
       if (remainingShippers.length > 0) {
@@ -549,7 +504,6 @@ export default function MapView() {
     if (coordinates.length < 2) return null;
 
     const tryOpenRouteService = async (): Promise<{ geometry: [number, number][]; distance: number } | null> => {
-      // Lấy danh sách keys (từ state hoặc env)
       const allKeys = apiKeys.length > 0 
         ? apiKeys 
         : (process.env.NEXT_PUBLIC_OPENROUTESERVICE_API_KEY ? [process.env.NEXT_PUBLIC_OPENROUTESERVICE_API_KEY] : []);
@@ -557,16 +511,12 @@ export default function MapView() {
       if (allKeys.length === 0) {
         return null;
       }
-      
-      // Thử với tối đa 3 API keys hoặc số lượng keys có sẵn
       const maxRetries = Math.min(3, allKeys.length);
-      
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         const apiKey = getNextApiKey();
         if (!apiKey) {
           continue;
-        }
-        
+        }  
         try {
           const url = `https://api.openrouteservice.org/v2/directions/driving-car`;
           const body = {
@@ -582,12 +532,9 @@ export default function MapView() {
             },
             body: JSON.stringify(body)
           });
-          
-          // Xử lý 429 - Rate Limit
           if (response.status === 429) {
             markKeyAsRateLimited(apiKey);
             console.warn(`API key bị rate limit, chuyển sang key khác...`);
-            // Tiếp tục thử với key khác
             continue;
           }
           
@@ -642,7 +589,6 @@ export default function MapView() {
         }
       }
       
-      // Tất cả các key đều fail
       return null;
     };
     const tryOSRM = async (): Promise<{ geometry: [number, number][]; distance: number } | null> => {
@@ -770,7 +716,6 @@ export default function MapView() {
       for (let i = 0; i < remaining.length; i++) {
         const targetIndex = remaining[i];
         const dist = distanceMatrix[currentIndex][targetIndex];
-        // Nếu mọi khoảng cách đều Infinity (thường do lỗi fetch), vẫn chọn điểm đầu tiên thay vì bỏ qua
         if (dist < nearestDistance || nearestIdx === -1) {
           nearestDistance = dist;
           nearestIdx = i;
@@ -937,8 +882,6 @@ export default function MapView() {
     
     return bestRoute;
   };
-
-  // Bước 1: Xây dựng đồ thị xung đột (Conflict Graph)
   const buildConflictGraph = (
     deliveryPoints: Array<{ id: string; position: [number, number] }>,
     distanceMatrix: number[][],
@@ -953,8 +896,6 @@ export default function MapView() {
         const idx1 = pointIndexMap.get(deliveryPoints[i].id)!;
         const idx2 = pointIndexMap.get(deliveryPoints[j].id)!;
         const distance = distanceMatrix[idx1][idx2];
-        
-        // Tạo cạnh nếu khoảng cách > conflictRadius
         if (distance > conflictRadius) {
           edges.push([deliveryPoints[i].id, deliveryPoints[j].id]);
         }
@@ -963,50 +904,37 @@ export default function MapView() {
     
     return { nodes, edges };
   };
-
-  // Bước 2: Thuật toán tô màu đồ thị (Greedy Coloring với Welsh-Powell)
   const colorOrders = (
     nodes: string[],
     edges: Array<[string, string]>,
     numShippers: number,
     points: Array<{ id: string; position: [number, number] }>
   ): Map<number, string[]> => {
-    // Tạo danh sách kề
     const adjacencyList = new Map<string, Set<string>>();
     nodes.forEach(node => adjacencyList.set(node, new Set()));
     edges.forEach(([u, v]) => {
       adjacencyList.get(u)!.add(v);
       adjacencyList.get(v)!.add(u);
     });
-    
-    // Tính bậc của mỗi đỉnh
     const degrees = new Map<string, number>();
     nodes.forEach(node => {
       degrees.set(node, adjacencyList.get(node)!.size);
     });
-    
-    // Sắp xếp theo bậc giảm dần (Welsh-Powell)
     const sortedNodes = [...nodes].sort((a, b) => 
       (degrees.get(b) || 0) - (degrees.get(a) || 0)
     );
-    
-    // Tô màu
     const colors = new Map<string, number>();
     let maxColor = -1;
     
     for (const node of sortedNodes) {
       const neighbors = adjacencyList.get(node)!;
       const usedColors = new Set<number>();
-      
-      // Tìm các màu đã được sử dụng bởi các đỉnh kề
       for (const neighbor of neighbors) {
         const neighborColor = colors.get(neighbor);
         if (neighborColor !== undefined) {
           usedColors.add(neighborColor);
         }
       }
-      
-      // Tìm màu nhỏ nhất chưa được sử dụng
       let color = 0;
       while (usedColors.has(color)) {
         color++;
@@ -1015,8 +943,6 @@ export default function MapView() {
       colors.set(node, color);
       maxColor = Math.max(maxColor, color);
     }
-    
-    // Nhóm các đỉnh theo màu
     const colorGroups = new Map<number, string[]>();
     colors.forEach((color, node) => {
       if (!colorGroups.has(color)) {
@@ -1024,16 +950,12 @@ export default function MapView() {
       }
       colorGroups.get(color)!.push(node);
     });
-    
-    // Nếu số màu > numShippers, gộp các nhóm màu
     if (maxColor + 1 > numShippers) {
       return mergeColorGroups(colorGroups, numShippers, points, distanceMatrixRef.current);
     }
     
     return colorGroups;
   };
-
-  // Gộp các nhóm màu có khoảng cách trung bình gần nhau nhất
   const mergeColorGroups = (
     colorGroups: Map<number, string[]>,
     numShippers: number,
@@ -1041,8 +963,6 @@ export default function MapView() {
     distanceCache: Map<string, number>
   ): Map<number, string[]> => {
     const groups = Array.from(colorGroups.entries());
-    
-    // Tính khoảng cách trung bình trong mỗi nhóm
     const groupDistances = groups.map(([color, groupNodes]) => {
       if (groupNodes.length < 2) return { color, avgDistance: 0, nodes: groupNodes };
       
@@ -1070,17 +990,10 @@ export default function MapView() {
         nodes: groupNodes
       };
     });
-    
-    // Sắp xếp theo khoảng cách trung bình tăng dần
     groupDistances.sort((a, b) => a.avgDistance - b.avgDistance);
-    
-    // Gộp các nhóm cho đến khi còn numShippers nhóm
     while (groupDistances.length > numShippers) {
-      // Gộp 2 nhóm có khoảng cách trung bình nhỏ nhất
       const group1 = groupDistances[0];
       const group2 = groupDistances[1];
-      
-      // Tính lại khoảng cách trung bình cho nhóm đã gộp
       const mergedNodes = [...group1.nodes, ...group2.nodes];
       let totalDistance = 0;
       let pairCount = 0;
@@ -1109,44 +1022,34 @@ export default function MapView() {
       groupDistances.splice(0, 2, mergedGroup);
       groupDistances.sort((a, b) => a.avgDistance - b.avgDistance);
     }
-    
-    // Tạo Map kết quả
     const result = new Map<number, string[]>();
     groupDistances.forEach((group, index) => {
       result.set(index, group.nodes);
     });
-    
     return result;
   };
-
-
   const handleRunAlgorithm = async () => {
     const shipperMarkers = markers.filter((m) => m.type === "shipper");
     if (shipperMarkers.length === 0) {
       toast.error("Vui lòng thêm ít nhất một vị trí shipper");
       return;
     }
-
     const deliveryMarkers = markers.filter((m) => m.type === "delivery");
     if (deliveryMarkers.length === 0) {
       toast.error("Vui lòng thêm ít nhất một địa điểm giao hàng");
       return;
     }
-
     if (numShippers < 1) {
       toast.error("Số lượng shipper phải lớn hơn 0");
       return;
     }
-
     if (shipperMarkers.length < numShippers) {
       toast.warning(`Bạn đã nhập ${shipperMarkers.length} shipper nhưng yêu cầu ${numShippers}. Sẽ sử dụng ${shipperMarkers.length} shipper.`);
     }
-
     setIsRunning(true);
     setPathResult(new Map());
     setPathGeometry(new Map());
     setPathDistance(new Map());
-
     try {
       const allPoints = [...shipperMarkers, ...deliveryMarkers];
       const totalPairs = (allPoints.length * (allPoints.length - 1)) / 2;
@@ -1155,9 +1058,6 @@ export default function MapView() {
       if (totalPairs > 0) {
         toast.loading(`Đang tính khoảng cách đường bộ (0/${totalPairs})...`, { id: "road-distance" });
       }
-      
-      // Tối ưu: Chỉ clear cache nếu markers thay đổi
-      // Kiểm tra xem có cần tính lại không
       const needsRecalculation = allPoints.some((point, i) => {
         for (let j = i + 1; j < allPoints.length; j++) {
           const key = `${point.position[0]},${point.position[1]}-${allPoints[j].position[0]},${allPoints[j].position[1]}`;
@@ -1170,19 +1070,15 @@ export default function MapView() {
       });
       
       if (needsRecalculation) {
-        // Chỉ tính lại các cặp chưa có trong cache
         const promises: Promise<void>[] = [];
-        const batchSize = 5; // Batch 5 requests cùng lúc
+        const batchSize = 5;
         let pendingCount = 0;
-        
         for (let i = 0; i < allPoints.length; i++) {
           for (let j = i + 1; j < allPoints.length; j++) {
             const fromMarker = allPoints[i];
             const toMarker = allPoints[j];
             const key = `${fromMarker.position[0]},${fromMarker.position[1]}-${toMarker.position[0]},${toMarker.position[1]}`;
             const reverseKey = `${toMarker.position[0]},${toMarker.position[1]}-${fromMarker.position[0]},${fromMarker.position[1]}`;
-            
-            // Chỉ tính nếu chưa có trong cache
             if (!distanceMatrixRef.current.has(key) && !distanceMatrixRef.current.has(reverseKey)) {
               pendingCount++;
               promises.push(
@@ -1196,8 +1092,6 @@ export default function MapView() {
                   }
                 })
               );
-              
-              // Batch requests để tăng tốc độ
               if (promises.length >= batchSize) {
                 await Promise.all(promises);
                 promises.length = 0;
@@ -1207,12 +1101,9 @@ export default function MapView() {
             }
           }
         }
-        
-        // Xử lý các requests còn lại
         if (promises.length > 0) {
           await Promise.all(promises);
         }
-        
         if (pendingCount === 0) {
           toast.dismiss("road-distance");
           toast.success("Sử dụng kết quả đã cache, không cần tính lại");
@@ -1235,8 +1126,6 @@ export default function MapView() {
       );
       
       const deliveryPoints = deliveryMarkers.map((m) => ({ id: m.id, position: m.position }));
-      
-      // Bước 2: Xây dựng đồ thị xung đột
       toast.loading("Đang xây dựng đồ thị xung đột...", { id: "conflict-graph" });
       const { nodes, edges } = buildConflictGraph(
         deliveryPoints,
@@ -1245,8 +1134,6 @@ export default function MapView() {
         conflictRadius
       );
       toast.dismiss("conflict-graph");
-      
-      // Bước 3: Tô màu đồ thị
       toast.loading("Đang tô màu đồ thị...", { id: "color-graph" });
       const colorGroups = colorOrders(
         nodes,
@@ -1255,19 +1142,12 @@ export default function MapView() {
         allPoints.map((p) => ({ id: p.id, position: p.position }))
       );
       toast.dismiss("color-graph");
-      
-      // Bước 4: Phân bổ mỗi nhóm màu cho shipper gần nhất
       toast.loading("Đang phân bổ đơn hàng cho shipper...", { id: "assign-shippers" });
-      const shipperAssignments = new Map<number, string>(); // color => shipperId
-      
-      // Tìm shipper gần nhất cho mỗi nhóm màu
+      const shipperAssignments = new Map<number, string>();
       for (const [color, deliveryIds] of colorGroups.entries()) {
         if (deliveryIds.length === 0) continue;
-        
         let nearestShipperId = shipperMarkers[0].id;
         let minTotalDistance = Infinity;
-        
-        // Tính tổng khoảng cách từ mỗi shipper đến tất cả đơn hàng trong nhóm
         for (const shipper of shipperMarkers) {
           const shipperIdx = pointIndexMap.get(shipper.id)!;
           let totalDist = 0;
@@ -1288,8 +1168,6 @@ export default function MapView() {
         shipperAssignments.set(color, nearestShipperId);
       }
       toast.dismiss("assign-shippers");
-      
-      // Bước 5: Tối ưu lộ trình cho từng màu (shipper)
       toast.loading("Đang tối ưu lộ trình cho từng shipper...", { id: "optimize-routes" });
       const finalPathResult = new Map<number, string[]>();
       const finalPathDistance = new Map<number, number>();
@@ -1325,7 +1203,6 @@ export default function MapView() {
         }
       }
       
-      // Xử lý từng nhóm màu
       for (const [color, deliveryIds] of colorGroups.entries()) {
         if (deliveryIds.length === 0) continue;
         
@@ -1348,7 +1225,6 @@ export default function MapView() {
         const fullRoute = [assignedShipperId, ...optimizedRoute];
         finalPathResult.set(color, fullRoute);
         
-        // Tính toán đường đi chi tiết cho nhóm này
         let totalDistance = 0;
         const allPathCoordinates: [number, number][] = [assignedShipper.position];
         let currentPointId = assignedShipperId;
@@ -1391,7 +1267,6 @@ export default function MapView() {
         `Đã phân chia ${deliveryMarkers.length} đơn hàng cho ${colorGroups.size} shipper. Tổng khoảng cách: ${totalDistance.toFixed(2)} km`
       );
       
-      // Lưu vào lịch sử
       saveToHistory(markers, numShippers, conflictRadius, {
         pathResult: finalPathResult,
         pathDistance: finalPathDistance,
@@ -1940,7 +1815,6 @@ export default function MapView() {
               let label = "";
               
               if (isShipper) {
-                // Kiểm tra xem shipper này có được phân bổ đơn hàng không
                 let assignedColor = -1;
                 for (const [color, route] of pathResult.entries()) {
                   if (route[0] === marker.id) {
@@ -1950,7 +1824,6 @@ export default function MapView() {
                 }
                 
                 if (assignedColor >= 0) {
-                  // Shipper được phân bổ - hiển thị màu tương ứng
                   const colorHexArray = [
                     "#ef4444", "#3b82f6", "#22c55e", "#eab308", 
                     "#a855f7", "#f97316", "#ec4899", "#92400e", 
@@ -1961,14 +1834,12 @@ export default function MapView() {
                   textColor = "#ffffff";
                   label = `S${assignedColor + 1}`;
                 } else {
-                  // Shipper chưa được phân bổ
                   backgroundColor = "#22c55e";
                   borderColor = "#16a34a";
                   textColor = "#ffffff";
                   label = "S";
                 }
               } else if (marker.type === "delivery") {
-                // Tìm màu của shipper phụ trách đơn hàng này
                 let assignedColor = -1;
                 let pathIndex = -1;
                 
