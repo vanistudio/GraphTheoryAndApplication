@@ -10,11 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
-import { Route, X, Search, MapPin } from "lucide-react";
+import { Route, X, Search, MapPin, History, Download, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { dijkstra } from "@/lib/algorithms/dijkstra";
 import { loadWasmModule } from "@/lib/algorithms/wasm-loader";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 
 if (typeof window !== "undefined") {
   delete (L.Icon.Default.prototype as unknown as { _getIconUrl: unknown })._getIconUrl;
@@ -68,9 +70,11 @@ export default function MapView() {
   const [markers, setMarkers] = useState<MapMarker[]>([]);
   const [mapMode, setMapMode] = useState<MapMode>("light");
   const [shipperLocation, setShipperLocation] = useState<string>("");
-  const [pathResult, setPathResult] = useState<string[]>([]);
-  const [pathDistance, setPathDistance] = useState<number>(0);
-  const [pathGeometry, setPathGeometry] = useState<[number, number][]>([]);
+  const [numShippers, setNumShippers] = useState<number>(2);
+  const [conflictRadius, setConflictRadius] = useState<number>(10);
+  const [pathResult, setPathResult] = useState<Map<number, string[]>>(new Map());
+  const [pathDistance, setPathDistance] = useState<Map<number, number>>(new Map());
+  const [pathGeometry, setPathGeometry] = useState<Map<number, [number, number][]>>(new Map());
   const [isRunning, setIsRunning] = useState(false);
   const mapRef = useRef<L.Map | null>(null);
   const [nextMarkerId, setNextMarkerId] = useState(1);
@@ -79,6 +83,23 @@ export default function MapView() {
   const [isSearching, setIsSearching] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [newMarkerType, setNewMarkerType] = useState<"shipper" | "delivery">("delivery");
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<Array<{
+    id: string;
+    timestamp: number;
+    markers: MapMarker[];
+    numShippers: number;
+    conflictRadius: number;
+    result?: {
+      pathResult: Array<[number, string[]]>;
+      pathDistance: Array<[number, number]>;
+    };
+  }>>([]);
+  const [apiKeys, setApiKeys] = useState<string[]>([]);
+  const [showApiKeysDialog, setShowApiKeysDialog] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const currentApiKeyIndexRef = useRef<number>(0);
+  const rateLimitedKeysRef = useRef<Set<string>>(new Set());
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const searchCacheRef = useRef<Map<string, Array<{ display_name: string; lat: string; lon: string }>>>(new Map());
@@ -86,6 +107,222 @@ export default function MapView() {
 
   const defaultCenter: [number, number] = [10.8231, 106.6297];
   const defaultZoom = 13;
+
+  // Load lịch sử và API keys từ localStorage khi component mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const savedHistory = localStorage.getItem("shipper-history");
+        if (savedHistory) {
+          const parsed = JSON.parse(savedHistory);
+          setHistory(parsed);
+        }
+        
+        // Load API keys
+        const savedApiKeys = localStorage.getItem("openrouteservice-api-keys");
+        if (savedApiKeys) {
+          const parsed = JSON.parse(savedApiKeys);
+          setApiKeys(parsed);
+        } else {
+          // Nếu chưa có, thử lấy từ env
+          const envKey = process.env.NEXT_PUBLIC_OPENROUTESERVICE_API_KEY;
+          if (envKey) {
+            setApiKeys([envKey]);
+            localStorage.setItem("openrouteservice-api-keys", JSON.stringify([envKey]));
+          }
+        }
+      } catch (error) {
+        console.error("Error loading data:", error);
+      }
+    }
+  }, []);
+
+  // Lưu API keys vào localStorage khi thay đổi
+  useEffect(() => {
+    if (typeof window !== "undefined" && apiKeys.length > 0) {
+      localStorage.setItem("openrouteservice-api-keys", JSON.stringify(apiKeys));
+    }
+  }, [apiKeys]);
+
+  // Lấy API key tiếp theo (xoay vòng)
+  const getNextApiKey = (): string | null => {
+    // Lấy danh sách keys (từ state hoặc env)
+    const allKeys = apiKeys.length > 0 
+      ? apiKeys 
+      : (process.env.NEXT_PUBLIC_OPENROUTESERVICE_API_KEY ? [process.env.NEXT_PUBLIC_OPENROUTESERVICE_API_KEY] : []);
+    
+    if (allKeys.length === 0) {
+      return null;
+    }
+    
+    // Lọc bỏ các key bị rate limit
+    const availableKeys = allKeys.filter(key => !rateLimitedKeysRef.current.has(key));
+    
+    if (availableKeys.length === 0) {
+      // Nếu tất cả đều bị rate limit, reset và thử lại với tất cả keys
+      rateLimitedKeysRef.current.clear();
+      const key = allKeys[currentApiKeyIndexRef.current % allKeys.length];
+      currentApiKeyIndexRef.current = (currentApiKeyIndexRef.current + 1) % allKeys.length;
+      return key;
+    }
+    
+    // Xoay vòng trong các key khả dụng
+    const key = availableKeys[currentApiKeyIndexRef.current % availableKeys.length];
+    currentApiKeyIndexRef.current = (currentApiKeyIndexRef.current + 1) % availableKeys.length;
+    return key;
+  };
+
+  // Đánh dấu API key bị rate limit
+  const markKeyAsRateLimited = (key: string) => {
+    rateLimitedKeysRef.current.add(key);
+    // Tự động reset sau 1 phút (có thể API đã reset rate limit)
+    setTimeout(() => {
+      rateLimitedKeysRef.current.delete(key);
+    }, 60000);
+  };
+
+  // Thêm API key
+  const addApiKey = (key: string) => {
+    if (key.trim() && !apiKeys.includes(key.trim())) {
+      setApiKeys([...apiKeys, key.trim()]);
+      setApiKeyInput("");
+      toast.success("Đã thêm API key");
+    } else if (apiKeys.includes(key.trim())) {
+      toast.error("API key đã tồn tại");
+    }
+  };
+
+  // Xóa API key
+  const removeApiKey = (key: string) => {
+    setApiKeys(apiKeys.filter(k => k !== key));
+    rateLimitedKeysRef.current.delete(key);
+    toast.success("Đã xóa API key");
+  };
+
+  // Lưu lịch sử vào localStorage
+  const saveToHistory = (markers: MapMarker[], numShippers: number, conflictRadius: number, result?: {
+    pathResult: Map<number, string[]>;
+    pathDistance: Map<number, number>;
+  }) => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const historyItem = {
+        id: `history-${Date.now()}`,
+        timestamp: Date.now(),
+        markers: markers,
+        numShippers,
+        conflictRadius,
+        result: result ? {
+          pathResult: Array.from(result.pathResult.entries()),
+          pathDistance: Array.from(result.pathDistance.entries()),
+        } : undefined,
+      };
+
+      const newHistory = [historyItem, ...history].slice(0, 50); // Giữ tối đa 50 lịch sử
+      setHistory(newHistory);
+      localStorage.setItem("shipper-history", JSON.stringify(newHistory));
+      toast.success("Đã lưu vào lịch sử");
+    } catch (error) {
+      console.error("Error saving history:", error);
+      toast.error("Lỗi khi lưu lịch sử");
+    }
+  };
+
+  // Tải lại từ lịch sử
+  const loadFromHistory = (historyItem: typeof history[0]) => {
+    setMarkers(historyItem.markers);
+    setNumShippers(historyItem.numShippers);
+    setConflictRadius(historyItem.conflictRadius);
+    
+    if (historyItem.result) {
+      const pathResultMap = new Map(historyItem.result.pathResult);
+      const pathDistanceMap = new Map(historyItem.result.pathDistance);
+      setPathResult(pathResultMap);
+      setPathDistance(pathDistanceMap);
+    } else {
+      setPathResult(new Map());
+      setPathDistance(new Map());
+      setPathGeometry(new Map());
+    }
+
+    // Tìm shipper đầu tiên làm mặc định
+    const firstShipper = historyItem.markers.find(m => m.type === "shipper");
+    if (firstShipper) {
+      setShipperLocation(firstShipper.id);
+    }
+
+    // Tính nextMarkerId
+    const maxId = historyItem.markers.reduce((max, m) => {
+      const match = m.id.match(/marker-(\d+)/);
+      if (match) {
+        const num = parseInt(match[1]);
+        return Math.max(max, num);
+      }
+      return max;
+    }, 0);
+    setNextMarkerId(maxId + 1);
+
+    setShowHistory(false);
+    toast.success("Đã tải lại từ lịch sử");
+  };
+
+  // Xóa lịch sử
+  const deleteHistory = (id: string) => {
+    const newHistory = history.filter(h => h.id !== id);
+    setHistory(newHistory);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("shipper-history", JSON.stringify(newHistory));
+    }
+    toast.success("Đã xóa khỏi lịch sử");
+  };
+
+  // Xuất lịch sử ra file JSON
+  const exportHistory = () => {
+    try {
+      const dataStr = JSON.stringify(history, null, 2);
+      const dataBlob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `shipper-history-${new Date().toISOString().split("T")[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success("Đã xuất lịch sử ra file JSON");
+    } catch (error) {
+      console.error("Error exporting history:", error);
+      toast.error("Lỗi khi xuất lịch sử");
+    }
+  };
+
+  // Nhập lịch sử từ file JSON
+  const importHistory = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const parsed = JSON.parse(content);
+        if (Array.isArray(parsed)) {
+          setHistory(parsed);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("shipper-history", JSON.stringify(parsed));
+          }
+          toast.success("Đã nhập lịch sử từ file");
+        } else {
+          toast.error("File không hợp lệ");
+        }
+      } catch (error) {
+        console.error("Error importing history:", error);
+        toast.error("Lỗi khi nhập lịch sử");
+      }
+    };
+    reader.readAsText(file);
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -212,14 +449,13 @@ export default function MapView() {
       name: result.display_name.split(",")[0] || `${newMarkerType === "shipper" ? "Vị trí shipper" : "Điểm giao hàng"} ${nextMarkerId}`,
       type: newMarkerType,
     };
-    if (newMarkerType === "shipper") {
-      setMarkers((prev) => {
-        const filtered = prev.filter((m) => m.type !== "shipper");
-        return [...filtered, newMarker];
-      });
+    
+    // Cho phép thêm nhiều shipper
+    setMarkers([...markers, newMarker]);
+    
+    // Nếu là shipper đầu tiên, tự động chọn làm shipper location mặc định
+    if (newMarkerType === "shipper" && !shipperLocation) {
       setShipperLocation(newMarker.id);
-    } else {
-      setMarkers([...markers, newMarker]);
     }
     
     setNextMarkerId(nextMarkerId + 1);
@@ -236,13 +472,22 @@ export default function MapView() {
 
   const deleteMarker = (id: string) => {
     const marker = markers.find((m) => m.id === id);
-    setMarkers(markers.filter((m) => m.id !== id));
+    const newMarkers = markers.filter((m) => m.id !== id);
+    setMarkers(newMarkers);
+    
+    // Nếu xóa shipper được chọn, tự động chọn shipper khác nếu còn
     if (shipperLocation === id) {
-      setShipperLocation("");
+      const remainingShippers = newMarkers.filter((m) => m.type === "shipper");
+      if (remainingShippers.length > 0) {
+        setShipperLocation(remainingShippers[0].id);
+      } else {
+        setShipperLocation("");
+      }
     }
-    setPathResult([]);
-    setPathDistance(0);
-    setPathGeometry([]);
+    
+    setPathResult(new Map());
+    setPathDistance(new Map());
+    setPathGeometry(new Map());
     distanceMatrixRef.current.clear();
     toast.success(`Đã xóa ${marker?.type === "shipper" ? "vị trí shipper" : "điểm giao hàng"}`);
   };
@@ -304,76 +549,101 @@ export default function MapView() {
     if (coordinates.length < 2) return null;
 
     const tryOpenRouteService = async (): Promise<{ geometry: [number, number][]; distance: number } | null> => {
-      const apiKey = process.env.NEXT_PUBLIC_OPENROUTESERVICE_API_KEY;
-      if (!apiKey) {
+      // Lấy danh sách keys (từ state hoặc env)
+      const allKeys = apiKeys.length > 0 
+        ? apiKeys 
+        : (process.env.NEXT_PUBLIC_OPENROUTESERVICE_API_KEY ? [process.env.NEXT_PUBLIC_OPENROUTESERVICE_API_KEY] : []);
+      
+      if (allKeys.length === 0) {
         return null;
       }
-      try {
-        const url = `https://api.openrouteservice.org/v2/directions/driving-car`;
-        const body = {
-          coordinates: coordinates.map(([lat, lon]) => [lon, lat]),
-        };
-        
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': apiKey
-          },
-          body: JSON.stringify(body)
-        });
-        
-        if (!response.ok) {
-          return null;
+      
+      // Thử với tối đa 3 API keys hoặc số lượng keys có sẵn
+      const maxRetries = Math.min(3, allKeys.length);
+      
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const apiKey = getNextApiKey();
+        if (!apiKey) {
+          continue;
         }
         
-        const data = await response.json();
-        
-        if (data.routes && Array.isArray(data.routes) && data.routes.length > 0) {
-          const route = data.routes[0];
+        try {
+          const url = `https://api.openrouteservice.org/v2/directions/driving-car`;
+          const body = {
+            coordinates: coordinates.map(([lat, lon]) => [lon, lat]),
+          };
           
-          if (route.geometry && typeof route.geometry === 'string') {
-            const polyline = route.geometry;
-            const decoded = decodePolyline(polyline);
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': apiKey
+            },
+            body: JSON.stringify(body)
+          });
+          
+          // Xử lý 429 - Rate Limit
+          if (response.status === 429) {
+            markKeyAsRateLimited(apiKey);
+            console.warn(`API key bị rate limit, chuyển sang key khác...`);
+            // Tiếp tục thử với key khác
+            continue;
+          }
+          
+          if (!response.ok) {
+            continue;
+          }
+          
+          const data = await response.json();
+          
+          if (data.routes && Array.isArray(data.routes) && data.routes.length > 0) {
+            const route = data.routes[0];
             
-            if (decoded && decoded.length >= 2) {
-              const geometry: [number, number][] = decoded.map(
-                ([lat, lon]: [number, number]) => [lat, lon]
-              );
-              const distance = (route.summary?.distance || 0) / 1000;
+            if (route.geometry && typeof route.geometry === 'string') {
+              const polyline = route.geometry;
+              const decoded = decodePolyline(polyline);
               
-              if (distance > 0 && geometry.length >= 2) {
-                return { geometry, distance };
+              if (decoded && decoded.length >= 2) {
+                const geometry: [number, number][] = decoded.map(
+                  ([lat, lon]: [number, number]) => [lat, lon]
+                );
+                const distance = (route.summary?.distance || 0) / 1000;
+                
+                if (distance > 0 && geometry.length >= 2) {
+                  return { geometry, distance };
+                }
               }
             }
           }
-        }
-        
-        if (data.features && Array.isArray(data.features) && data.features.length > 0) {
-          const feature = data.features[0];
           
-          if (feature.geometry && feature.geometry.coordinates) {
-            const coords = feature.geometry.coordinates;
+          if (data.features && Array.isArray(data.features) && data.features.length > 0) {
+            const feature = data.features[0];
             
-            if (Array.isArray(coords) && coords.length >= 2) {
-              const geometry: [number, number][] = coords.map(
-                ([lon, lat]: [number, number]) => [lat, lon]
-              );
+            if (feature.geometry && feature.geometry.coordinates) {
+              const coords = feature.geometry.coordinates;
               
-              const distance = (feature.properties?.summary?.distance || 0) / 1000;
-              
-              if (distance > 0 && geometry.length >= 2) {
-                return { geometry, distance };
+              if (Array.isArray(coords) && coords.length >= 2) {
+                const geometry: [number, number][] = coords.map(
+                  ([lon, lat]: [number, number]) => [lat, lon]
+                );
+                
+                const distance = (feature.properties?.summary?.distance || 0) / 1000;
+                
+                if (distance > 0 && geometry.length >= 2) {
+                  return { geometry, distance };
+                }
               }
             }
           }
+        } catch (error) {
+          console.warn("Error with API key, trying next...", error);
+          continue;
         }
-        
-        return null;
-      } catch {
-        return null;
       }
+      
+      // Tất cả các key đều fail
+      return null;
     };
     const tryOSRM = async (): Promise<{ geometry: [number, number][]; distance: number } | null> => {
       try {
@@ -500,8 +770,8 @@ export default function MapView() {
       for (let i = 0; i < remaining.length; i++) {
         const targetIndex = remaining[i];
         const dist = distanceMatrix[currentIndex][targetIndex];
-        
-        if (dist < nearestDistance) {
+        // Nếu mọi khoảng cách đều Infinity (thường do lỗi fetch), vẫn chọn điểm đầu tiên thay vì bỏ qua
+        if (dist < nearestDistance || nearestIdx === -1) {
           nearestDistance = dist;
           nearestIdx = i;
         }
@@ -668,10 +938,192 @@ export default function MapView() {
     return bestRoute;
   };
 
+  // Bước 1: Xây dựng đồ thị xung đột (Conflict Graph)
+  const buildConflictGraph = (
+    deliveryPoints: Array<{ id: string; position: [number, number] }>,
+    distanceMatrix: number[][],
+    pointIndexMap: Map<string, number>,
+    conflictRadius: number
+  ): { nodes: string[]; edges: Array<[string, string]> } => {
+    const nodes = deliveryPoints.map(p => p.id);
+    const edges: Array<[string, string]> = [];
+    
+    for (let i = 0; i < deliveryPoints.length; i++) {
+      for (let j = i + 1; j < deliveryPoints.length; j++) {
+        const idx1 = pointIndexMap.get(deliveryPoints[i].id)!;
+        const idx2 = pointIndexMap.get(deliveryPoints[j].id)!;
+        const distance = distanceMatrix[idx1][idx2];
+        
+        // Tạo cạnh nếu khoảng cách > conflictRadius
+        if (distance > conflictRadius) {
+          edges.push([deliveryPoints[i].id, deliveryPoints[j].id]);
+        }
+      }
+    }
+    
+    return { nodes, edges };
+  };
+
+  // Bước 2: Thuật toán tô màu đồ thị (Greedy Coloring với Welsh-Powell)
+  const colorOrders = (
+    nodes: string[],
+    edges: Array<[string, string]>,
+    numShippers: number,
+    points: Array<{ id: string; position: [number, number] }>
+  ): Map<number, string[]> => {
+    // Tạo danh sách kề
+    const adjacencyList = new Map<string, Set<string>>();
+    nodes.forEach(node => adjacencyList.set(node, new Set()));
+    edges.forEach(([u, v]) => {
+      adjacencyList.get(u)!.add(v);
+      adjacencyList.get(v)!.add(u);
+    });
+    
+    // Tính bậc của mỗi đỉnh
+    const degrees = new Map<string, number>();
+    nodes.forEach(node => {
+      degrees.set(node, adjacencyList.get(node)!.size);
+    });
+    
+    // Sắp xếp theo bậc giảm dần (Welsh-Powell)
+    const sortedNodes = [...nodes].sort((a, b) => 
+      (degrees.get(b) || 0) - (degrees.get(a) || 0)
+    );
+    
+    // Tô màu
+    const colors = new Map<string, number>();
+    let maxColor = -1;
+    
+    for (const node of sortedNodes) {
+      const neighbors = adjacencyList.get(node)!;
+      const usedColors = new Set<number>();
+      
+      // Tìm các màu đã được sử dụng bởi các đỉnh kề
+      for (const neighbor of neighbors) {
+        const neighborColor = colors.get(neighbor);
+        if (neighborColor !== undefined) {
+          usedColors.add(neighborColor);
+        }
+      }
+      
+      // Tìm màu nhỏ nhất chưa được sử dụng
+      let color = 0;
+      while (usedColors.has(color)) {
+        color++;
+      }
+      
+      colors.set(node, color);
+      maxColor = Math.max(maxColor, color);
+    }
+    
+    // Nhóm các đỉnh theo màu
+    const colorGroups = new Map<number, string[]>();
+    colors.forEach((color, node) => {
+      if (!colorGroups.has(color)) {
+        colorGroups.set(color, []);
+      }
+      colorGroups.get(color)!.push(node);
+    });
+    
+    // Nếu số màu > numShippers, gộp các nhóm màu
+    if (maxColor + 1 > numShippers) {
+      return mergeColorGroups(colorGroups, numShippers, points, distanceMatrixRef.current);
+    }
+    
+    return colorGroups;
+  };
+
+  // Gộp các nhóm màu có khoảng cách trung bình gần nhau nhất
+  const mergeColorGroups = (
+    colorGroups: Map<number, string[]>,
+    numShippers: number,
+    points: Array<{ id: string; position: [number, number] }>,
+    distanceCache: Map<string, number>
+  ): Map<number, string[]> => {
+    const groups = Array.from(colorGroups.entries());
+    
+    // Tính khoảng cách trung bình trong mỗi nhóm
+    const groupDistances = groups.map(([color, groupNodes]) => {
+      if (groupNodes.length < 2) return { color, avgDistance: 0, nodes: groupNodes };
+      
+      let totalDistance = 0;
+      let pairCount = 0;
+      
+      for (let i = 0; i < groupNodes.length; i++) {
+        for (let j = i + 1; j < groupNodes.length; j++) {
+          const point1 = points.find(p => p.id === groupNodes[i]);
+          const point2 = points.find(p => p.id === groupNodes[j]);
+          
+          if (point1 && point2) {
+            const key = `${point1.position[0]},${point1.position[1]}-${point2.position[0]},${point2.position[1]}`;
+            const reverseKey = `${point2.position[0]},${point2.position[1]}-${point1.position[0]},${point1.position[1]}`;
+            const dist = distanceCache.get(key) || distanceCache.get(reverseKey) || 0;
+            totalDistance += dist;
+            pairCount++;
+          }
+        }
+      }
+      
+      return {
+        color,
+        avgDistance: pairCount > 0 ? totalDistance / pairCount : Infinity,
+        nodes: groupNodes
+      };
+    });
+    
+    // Sắp xếp theo khoảng cách trung bình tăng dần
+    groupDistances.sort((a, b) => a.avgDistance - b.avgDistance);
+    
+    // Gộp các nhóm cho đến khi còn numShippers nhóm
+    while (groupDistances.length > numShippers) {
+      // Gộp 2 nhóm có khoảng cách trung bình nhỏ nhất
+      const group1 = groupDistances[0];
+      const group2 = groupDistances[1];
+      
+      // Tính lại khoảng cách trung bình cho nhóm đã gộp
+      const mergedNodes = [...group1.nodes, ...group2.nodes];
+      let totalDistance = 0;
+      let pairCount = 0;
+      
+      for (let i = 0; i < mergedNodes.length; i++) {
+        for (let j = i + 1; j < mergedNodes.length; j++) {
+          const point1 = points.find(p => p.id === mergedNodes[i]);
+          const point2 = points.find(p => p.id === mergedNodes[j]);
+          
+          if (point1 && point2) {
+            const key = `${point1.position[0]},${point1.position[1]}-${point2.position[0]},${point2.position[1]}`;
+            const reverseKey = `${point2.position[0]},${point2.position[1]}-${point1.position[0]},${point1.position[1]}`;
+            const dist = distanceCache.get(key) || distanceCache.get(reverseKey) || 0;
+            totalDistance += dist;
+            pairCount++;
+          }
+        }
+      }
+      
+      const mergedGroup = {
+        color: group1.color,
+        avgDistance: pairCount > 0 ? totalDistance / pairCount : Infinity,
+        nodes: mergedNodes
+      };
+      
+      groupDistances.splice(0, 2, mergedGroup);
+      groupDistances.sort((a, b) => a.avgDistance - b.avgDistance);
+    }
+    
+    // Tạo Map kết quả
+    const result = new Map<number, string[]>();
+    groupDistances.forEach((group, index) => {
+      result.set(index, group.nodes);
+    });
+    
+    return result;
+  };
+
 
   const handleRunAlgorithm = async () => {
-    if (!shipperLocation) {
-      toast.error("Vui lòng thêm vị trí shipper");
+    const shipperMarkers = markers.filter((m) => m.type === "shipper");
+    if (shipperMarkers.length === 0) {
+      toast.error("Vui lòng thêm ít nhất một vị trí shipper");
       return;
     }
 
@@ -681,18 +1133,22 @@ export default function MapView() {
       return;
     }
 
-    const shipperMarker = markers.find((m) => m.id === shipperLocation);
-    if (!shipperMarker) {
-      toast.error("Không tìm thấy vị trí shipper");
+    if (numShippers < 1) {
+      toast.error("Số lượng shipper phải lớn hơn 0");
       return;
     }
 
+    if (shipperMarkers.length < numShippers) {
+      toast.warning(`Bạn đã nhập ${shipperMarkers.length} shipper nhưng yêu cầu ${numShippers}. Sẽ sử dụng ${shipperMarkers.length} shipper.`);
+    }
+
     setIsRunning(true);
-    setPathResult([]);
-    setPathGeometry([]);
+    setPathResult(new Map());
+    setPathGeometry(new Map());
+    setPathDistance(new Map());
 
     try {
-      const allPoints = [shipperMarker, ...deliveryMarkers];
+      const allPoints = [...shipperMarkers, ...deliveryMarkers];
       const totalPairs = (allPoints.length * (allPoints.length - 1)) / 2;
       let processedPairs = 0;
       
@@ -700,50 +1156,145 @@ export default function MapView() {
         toast.loading(`Đang tính khoảng cách đường bộ (0/${totalPairs})...`, { id: "road-distance" });
       }
       
-      distanceMatrixRef.current.clear();
-      
-      for (let i = 0; i < allPoints.length; i++) {
+      // Tối ưu: Chỉ clear cache nếu markers thay đổi
+      // Kiểm tra xem có cần tính lại không
+      const needsRecalculation = allPoints.some((point, i) => {
         for (let j = i + 1; j < allPoints.length; j++) {
-          const fromMarker = allPoints[i];
-          const toMarker = allPoints[j];
-          
-          await getRoadDistance(fromMarker.position, toMarker.position, true);
-          processedPairs++;
-          if (totalPairs > 5) {
-            toast.loading(
-              `Đang tính khoảng cách đường bộ (${processedPairs}/${totalPairs})...`,
-              { id: "road-distance" }
-            );
+          const key = `${point.position[0]},${point.position[1]}-${allPoints[j].position[0]},${allPoints[j].position[1]}`;
+          const reverseKey = `${allPoints[j].position[0]},${allPoints[j].position[1]}-${point.position[0]},${point.position[1]}`;
+          if (!distanceMatrixRef.current.has(key) && !distanceMatrixRef.current.has(reverseKey)) {
+            return true;
           }
         }
+        return false;
+      });
+      
+      if (needsRecalculation) {
+        // Chỉ tính lại các cặp chưa có trong cache
+        const promises: Promise<void>[] = [];
+        const batchSize = 5; // Batch 5 requests cùng lúc
+        let pendingCount = 0;
+        
+        for (let i = 0; i < allPoints.length; i++) {
+          for (let j = i + 1; j < allPoints.length; j++) {
+            const fromMarker = allPoints[i];
+            const toMarker = allPoints[j];
+            const key = `${fromMarker.position[0]},${fromMarker.position[1]}-${toMarker.position[0]},${toMarker.position[1]}`;
+            const reverseKey = `${toMarker.position[0]},${toMarker.position[1]}-${fromMarker.position[0]},${fromMarker.position[1]}`;
+            
+            // Chỉ tính nếu chưa có trong cache
+            if (!distanceMatrixRef.current.has(key) && !distanceMatrixRef.current.has(reverseKey)) {
+              pendingCount++;
+              promises.push(
+                getRoadDistance(fromMarker.position, toMarker.position, true).then(() => {
+                  processedPairs++;
+                  if (totalPairs > 5 && processedPairs % batchSize === 0) {
+                    toast.loading(
+                      `Đang tính khoảng cách đường bộ (${processedPairs}/${totalPairs})...`,
+                      { id: "road-distance" }
+                    );
+                  }
+                })
+              );
+              
+              // Batch requests để tăng tốc độ
+              if (promises.length >= batchSize) {
+                await Promise.all(promises);
+                promises.length = 0;
+              }
+            } else {
+              processedPairs++;
+            }
+          }
+        }
+        
+        // Xử lý các requests còn lại
+        if (promises.length > 0) {
+          await Promise.all(promises);
+        }
+        
+        if (pendingCount === 0) {
+          toast.dismiss("road-distance");
+          toast.success("Sử dụng kết quả đã cache, không cần tính lại");
+        }
+      } else {
+        toast.dismiss("road-distance");
+        toast.success("Sử dụng kết quả đã cache, không cần tính lại");
       }
       
       toast.dismiss("road-distance");
+      
       const pointIndexMap = new Map<string, number>();
       allPoints.forEach((point, index) => {
         pointIndexMap.set(point.id, index);
       });
-      toast.loading("Đang tối ưu tuyến đường...", { id: "optimize-route" });
+      
       const distanceMatrix = buildDistanceMatrix(
         allPoints.map((p) => ({ id: p.id, position: p.position })),
         distanceMatrixRef.current
       );
-      const shipperIndex = pointIndexMap.get(shipperLocation)!;
-      const deliveryIndices = deliveryMarkers.map((m) => pointIndexMap.get(m.id)!);
       
-      const optimizedRoute = await optimizeRouteWithDijkstra(
-        shipperIndex,
-        deliveryIndices,
-        allPoints.map((p) => ({ id: p.id, position: p.position })),
-        distanceMatrix
+      const deliveryPoints = deliveryMarkers.map((m) => ({ id: m.id, position: m.position }));
+      
+      // Bước 2: Xây dựng đồ thị xung đột
+      toast.loading("Đang xây dựng đồ thị xung đột...", { id: "conflict-graph" });
+      const { nodes, edges } = buildConflictGraph(
+        deliveryPoints,
+        distanceMatrix,
+        pointIndexMap,
+        conflictRadius
       );
-
-      toast.dismiss("optimize-route");
-      const fullRoute = [shipperLocation, ...optimizedRoute];
-      setPathResult(fullRoute);
-      let totalDistance = 0;
-      const allPathCoordinates: [number, number][] = [shipperMarker.position];
-      toast.loading("Đang tính toán đường đi chi tiết...", { id: "road-route" });
+      toast.dismiss("conflict-graph");
+      
+      // Bước 3: Tô màu đồ thị
+      toast.loading("Đang tô màu đồ thị...", { id: "color-graph" });
+      const colorGroups = colorOrders(
+        nodes,
+        edges,
+        numShippers,
+        allPoints.map((p) => ({ id: p.id, position: p.position }))
+      );
+      toast.dismiss("color-graph");
+      
+      // Bước 4: Phân bổ mỗi nhóm màu cho shipper gần nhất
+      toast.loading("Đang phân bổ đơn hàng cho shipper...", { id: "assign-shippers" });
+      const shipperAssignments = new Map<number, string>(); // color => shipperId
+      
+      // Tìm shipper gần nhất cho mỗi nhóm màu
+      for (const [color, deliveryIds] of colorGroups.entries()) {
+        if (deliveryIds.length === 0) continue;
+        
+        let nearestShipperId = shipperMarkers[0].id;
+        let minTotalDistance = Infinity;
+        
+        // Tính tổng khoảng cách từ mỗi shipper đến tất cả đơn hàng trong nhóm
+        for (const shipper of shipperMarkers) {
+          const shipperIdx = pointIndexMap.get(shipper.id)!;
+          let totalDist = 0;
+          
+          for (const deliveryId of deliveryIds) {
+            const deliveryIdx = pointIndexMap.get(deliveryId);
+            if (deliveryIdx !== undefined) {
+              totalDist += distanceMatrix[shipperIdx][deliveryIdx];
+            }
+          }
+          
+          if (totalDist < minTotalDistance) {
+            minTotalDistance = totalDist;
+            nearestShipperId = shipper.id;
+          }
+        }
+        
+        shipperAssignments.set(color, nearestShipperId);
+      }
+      toast.dismiss("assign-shippers");
+      
+      // Bước 5: Tối ưu lộ trình cho từng màu (shipper)
+      toast.loading("Đang tối ưu lộ trình cho từng shipper...", { id: "optimize-routes" });
+      const finalPathResult = new Map<number, string[]>();
+      const finalPathDistance = new Map<number, number>();
+      const finalPathGeometry = new Map<number, [number, number][]>();
+      
       const graphNodes = allPoints.map((marker) => ({
         id: marker.id,
         label: marker.name,
@@ -773,41 +1324,78 @@ export default function MapView() {
           }
         }
       }
-      let currentPointId = shipperLocation;
-      for (const nextPointId of optimizedRoute) {
-        const dijkstraResult = await dijkstra(graphNodes, graphEdges, currentPointId, nextPointId);
+      
+      // Xử lý từng nhóm màu
+      for (const [color, deliveryIds] of colorGroups.entries()) {
+        if (deliveryIds.length === 0) continue;
         
-        if (dijkstraResult.path.length > 0) {
-          totalDistance += dijkstraResult.distance;
-          const pathCoords = dijkstraResult.path.map((id) => {
-            const marker = markers.find((m) => m.id === id);
-            return marker ? marker.position : null;
-          }).filter((pos): pos is [number, number] => pos !== null);
+        const assignedShipperId = shipperAssignments.get(color);
+        if (!assignedShipperId) continue;
+        
+        const assignedShipper = shipperMarkers.find(s => s.id === assignedShipperId);
+        if (!assignedShipper) continue;
+        
+        const shipperIndex = pointIndexMap.get(assignedShipperId)!;
+        const deliveryIndices = deliveryIds.map(id => pointIndexMap.get(id)!).filter(idx => idx !== undefined);
+        
+        const optimizedRoute = await optimizeRouteWithDijkstra(
+          shipperIndex,
+          deliveryIndices,
+          allPoints.map((p) => ({ id: p.id, position: p.position })),
+          distanceMatrix
+        );
+        
+        const fullRoute = [assignedShipperId, ...optimizedRoute];
+        finalPathResult.set(color, fullRoute);
+        
+        // Tính toán đường đi chi tiết cho nhóm này
+        let totalDistance = 0;
+        const allPathCoordinates: [number, number][] = [assignedShipper.position];
+        let currentPointId = assignedShipperId;
+        
+        for (const nextPointId of optimizedRoute) {
+          const dijkstraResult = await dijkstra(graphNodes, graphEdges, currentPointId, nextPointId);
           
-          if (pathCoords.length >= 2) {
-            const segmentRoute = await getRoadRoute(pathCoords);
-            if (segmentRoute && segmentRoute.geometry && segmentRoute.geometry.length > 0) {
-              allPathCoordinates.push(...segmentRoute.geometry.slice(1));
-            } else {
-              allPathCoordinates.push(pathCoords[pathCoords.length - 1]);
+          if (dijkstraResult.path.length > 0) {
+            totalDistance += dijkstraResult.distance;
+            const pathCoords = dijkstraResult.path.map((id) => {
+              const marker = markers.find((m) => m.id === id);
+              return marker ? marker.position : null;
+            }).filter((pos): pos is [number, number] => pos !== null);
+            
+            if (pathCoords.length >= 2) {
+              const segmentRoute = await getRoadRoute(pathCoords);
+              if (segmentRoute && segmentRoute.geometry && segmentRoute.geometry.length > 0) {
+                allPathCoordinates.push(...segmentRoute.geometry.slice(1));
+              } else {
+                allPathCoordinates.push(pathCoords[pathCoords.length - 1]);
+              }
             }
+            
+            currentPointId = nextPointId;
           }
-          
-          currentPointId = nextPointId;
         }
+        
+        finalPathDistance.set(color, totalDistance);
+        finalPathGeometry.set(color, allPathCoordinates);
       }
       
-      toast.dismiss("road-route");
-
-      if (allPathCoordinates.length >= 2) {
-        setPathGeometry(allPathCoordinates);
-        setPathDistance(totalDistance);
-        toast.success(`Lịch trình tối ưu: ${totalDistance.toFixed(2)} km (${deliveryMarkers.length} điểm giao hàng)`);
-      } else {
-        setPathGeometry([]);
-        setPathDistance(totalDistance);
-        toast.success(`Lịch trình tối ưu: ${totalDistance.toFixed(2)} km`);
-      }
+      toast.dismiss("optimize-routes");
+      
+      setPathResult(finalPathResult);
+      setPathDistance(finalPathDistance);
+      setPathGeometry(finalPathGeometry);
+      
+      const totalDistance = Array.from(finalPathDistance.values()).reduce((sum, dist) => sum + dist, 0);
+      toast.success(
+        `Đã phân chia ${deliveryMarkers.length} đơn hàng cho ${colorGroups.size} shipper. Tổng khoảng cách: ${totalDistance.toFixed(2)} km`
+      );
+      
+      // Lưu vào lịch sử
+      saveToHistory(markers, numShippers, conflictRadius, {
+        pathResult: finalPathResult,
+        pathDistance: finalPathDistance,
+      });
     } catch (error) {
       console.error("Error running algorithm:", error);
       toast.error("Lỗi khi chạy thuật toán");
@@ -905,66 +1493,326 @@ export default function MapView() {
               <Separator />
 
               <div className="space-y-3">
-                <Label className="text-sm font-medium">Tối ưu lịch trình giao hàng</Label>
+                <Label className="text-sm font-medium">Phân chia đơn hàng cho k-shipper</Label>
                 <div className="space-y-2">
+                  {markers.filter((m) => m.type === "shipper").length === 0 && (
+                    <p className="text-xs text-muted-foreground p-2 bg-yellow-50 dark:bg-yellow-950/20 rounded border border-yellow-200 dark:border-yellow-800">
+                      Chưa có vị trí shipper. Hãy thêm từ tìm kiếm phía trên.
+                    </p>
+                  )}
+                  {markers.filter((m) => m.type === "shipper").length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Đã thêm {markers.filter((m) => m.type === "shipper").length} vị trí shipper. Hệ thống sẽ tự động phân bổ đơn hàng cho shipper gần nhất.
+                    </p>
+                  )}
                   <div>
-                    <Label className="text-xs text-muted-foreground mb-1.5 block">Vị trí shipper</Label>
-                    <Select value={shipperLocation} onValueChange={setShipperLocation}>
-                      <SelectTrigger className={`w-full text-sm ${customButtonShadow}`}>
-                        <SelectValue placeholder="Chọn vị trí shipper" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {markers.filter((m) => m.type === "shipper").map((marker) => (
-                          <SelectItem key={marker.id} value={marker.id}>
-                            {marker.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {markers.filter((m) => m.type === "shipper").length === 0 && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Chưa có vị trí shipper. Hãy thêm từ tìm kiếm phía trên.
-                      </p>
-                    )}
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">Số lượng shipper (k)</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={numShippers}
+                      onChange={(e) => setNumShippers(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                      className={`w-full ${customButtonShadow}`}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Số lượng shipper sẵn có (tương ứng số màu tối đa). Nếu nhập nhiều shipper hơn số này, hệ thống sẽ sử dụng tất cả.
+                    </p>
                   </div>
-                  <Button
-                    onClick={handleRunAlgorithm}
-                    disabled={
-                      isRunning || 
-                      !shipperLocation ||
-                      markers.filter((m) => m.type === "delivery").length === 0
-                    }
-                    className={`w-full ${customButtonShadow}`}
-                  >
-                    <Route className="h-4 w-4 mr-2" />
-                    {isRunning ? "Đang tối ưu..." : "Tối ưu lịch trình"}
-                  </Button>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">Ngưỡng xung đột (km)</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="100"
+                      step="0.5"
+                      value={conflictRadius}
+                      onChange={(e) => setConflictRadius(Math.max(1, Math.min(100, parseFloat(e.target.value) || 10)))}
+                      className={`w-full ${customButtonShadow}`}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Nếu 2 đơn hàng cách nhau &gt; ngưỡng này, chúng sẽ được giao bởi shipper khác nhau
+                    </p>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <Label className="text-xs text-muted-foreground">API Keys OpenRouteService</Label>
+                      <Dialog open={showApiKeysDialog} onOpenChange={setShowApiKeysDialog}>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-7"
+                            onClick={() => setShowApiKeysDialog(true)}
+                          >
+                            Quản lý ({apiKeys.length})
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-md">
+                          <DialogHeader>
+                            <DialogTitle>Quản lý API Keys</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4 mt-4">
+                            <div className="space-y-2">
+                              <Label className="text-sm">Thêm API Key mới</Label>
+                              <div className="flex gap-2">
+                                <Input
+                                  type="password"
+                                  placeholder="Nhập API key..."
+                                  value={apiKeyInput}
+                                  onChange={(e) => setApiKeyInput(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && apiKeyInput.trim()) {
+                                      addApiKey(apiKeyInput);
+                                    }
+                                  }}
+                                  className="flex-1"
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    if (apiKeyInput.trim()) {
+                                      addApiKey(apiKeyInput);
+                                    }
+                                  }}
+                                  disabled={!apiKeyInput.trim()}
+                                >
+                                  Thêm
+                                </Button>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Hệ thống sẽ tự động xoay vòng các API keys để tránh rate limit (429)
+                              </p>
+                            </div>
+                            <Separator />
+                            <div className="space-y-2">
+                              <Label className="text-sm">Danh sách API Keys ({apiKeys.length})</Label>
+                              {apiKeys.length === 0 ? (
+                                <p className="text-xs text-muted-foreground text-center py-4">
+                                  Chưa có API key. Thêm API key để sử dụng OpenRouteService.
+                                </p>
+                              ) : (
+                                <div className="space-y-2 max-h-60 overflow-y-auto">
+                                  {apiKeys.map((key, index) => (
+                                    <Card key={index} className="p-2 border border-border">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-xs font-mono truncate">
+                                            {key.substring(0, 20)}...
+                                          </p>
+                                          {rateLimitedKeysRef.current.has(key) && (
+                                            <Badge variant="destructive" className="text-xs mt-1">
+                                              Rate Limited
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => removeApiKey(key)}
+                                          className="h-7 w-7 p-0"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </Button>
+                                      </div>
+                                    </Card>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {apiKeys.length > 0 
+                        ? `Đang sử dụng ${apiKeys.length} API key(s). Hệ thống tự động xoay vòng khi gặp 429.`
+                        : "Chưa có API key. Click 'Quản lý' để thêm API key từ OpenRouteService."}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleRunAlgorithm}
+                      disabled={
+                        isRunning || 
+                        markers.filter((m) => m.type === "shipper").length === 0 ||
+                        markers.filter((m) => m.type === "delivery").length === 0 ||
+                        numShippers < 1
+                      }
+                      className={`flex-1 ${customButtonShadow}`}
+                    >
+                      <Route className="h-4 w-4 mr-2" />
+                      {isRunning ? "Đang phân chia..." : "Phân chia đơn hàng"}
+                    </Button>
+                    <Dialog open={showHistory} onOpenChange={setShowHistory}>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={customButtonShadow}
+                          onClick={() => setShowHistory(true)}
+                        >
+                          <History className="h-4 w-4" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center justify-between">
+                            <span>Lịch sử sử dụng</span>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={exportHistory}
+                                className="text-xs"
+                              >
+                                <Download className="h-3 w-3 mr-1" />
+                                Xuất JSON
+                              </Button>
+                              <label className="cursor-pointer">
+                                <input
+                                  type="file"
+                                  accept=".json"
+                                  onChange={importHistory}
+                                  className="hidden"
+                                />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-xs"
+                                  asChild
+                                >
+                                  <span>
+                                    <Upload className="h-3 w-3 mr-1" />
+                                    Nhập JSON
+                                  </span>
+                                </Button>
+                              </label>
+                            </div>
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-2 mt-4">
+                          {history.length === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-8">
+                              Chưa có lịch sử. Chạy thuật toán để lưu lịch sử.
+                            </p>
+                          ) : (
+                            history.map((item) => (
+                              <Card key={item.id} className={`p-3 border border-border ${customButtonShadow}`}>
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="outline">
+                                        {new Date(item.timestamp).toLocaleString("vi-VN")}
+                                      </Badge>
+                                      {item.result && (
+                                        <Badge variant="secondary">
+                                          Đã có kết quả
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground space-y-1">
+                                      <p>
+                                        Shipper: {item.markers.filter(m => m.type === "shipper").length} | 
+                                        Đơn hàng: {item.markers.filter(m => m.type === "delivery").length}
+                                      </p>
+                                      <p>
+                                        Số shipper: {item.numShippers} | 
+                                        Ngưỡng xung đột: {item.conflictRadius} km
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      onClick={() => loadFromHistory(item)}
+                                      className="text-xs"
+                                    >
+                                      Sử dụng
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => deleteHistory(item.id)}
+                                      className="text-xs"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </Card>
+                            ))
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 </div>
               </div>
 
-              {pathResult.length > 0 && (
+              {pathResult.size > 0 && (
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Kết quả tối ưu</Label>
+                  <Label className="text-sm font-medium">Kết quả phân chia</Label>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {Array.from(pathResult.entries()).map(([color, route]) => {
+                      const distance = pathDistance.get(color) || 0;
+                      const shipperId = route[0];
+                      const deliveryIds = route.slice(1);
+                      const shipperMarker = markers.find(m => m.id === shipperId);
+                      const colorNames = ["Đỏ", "Xanh dương", "Xanh lá", "Vàng", "Tím", "Cam", "Hồng", "Nâu", "Xám", "Đen"];
+                      const colorHexArray = [
+                        "#ef4444", "#3b82f6", "#22c55e", "#eab308", 
+                        "#a855f7", "#f97316", "#ec4899", "#92400e", 
+                        "#6b7280", "#000000"
+                      ];
+                      const colorName = colorNames[color % colorNames.length];
+                      const colorHex = colorHexArray[color % colorHexArray.length];
+                      
+                      return (
+                        <Card key={color} className={`p-3 border border-border bg-muted/50 ${customButtonShadow}`}>
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-4 h-4 rounded-full border-2 border-border"
+                                style={{ backgroundColor: colorHex }}
+                              />
+                              <p className="text-sm font-medium">
+                                Shipper {color + 1} ({colorName})
+                                {shipperMarker && (
+                                  <span className="text-xs text-muted-foreground ml-1">
+                                    - {shipperMarker.name}
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Khoảng cách: {distance.toFixed(2)} km | {deliveryIds.length} đơn hàng
+                            </p>
+                            <div className="mt-2 pt-2 border-t border-border">
+                              <p className="text-xs font-medium mb-1">Thứ tự giao hàng:</p>
+                              <ol className="text-xs text-muted-foreground space-y-0.5 list-decimal list-inside">
+                                {deliveryIds.map((id, idx) => {
+                                  const marker = markers.find((m) => m.id === id);
+                                  return marker ? (
+                                    <li key={id} className="truncate">
+                                      {idx + 1}. {marker.name}
+                                    </li>
+                                  ) : null;
+                                })}
+                              </ol>
+                            </div>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
                   <Card className={`p-3 border border-border bg-muted/50 ${customButtonShadow}`}>
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">Tổng khoảng cách: {pathDistance.toFixed(2)} km</p>
-                      <p className="text-xs text-muted-foreground">
-                        Số điểm giao hàng: {markers.filter((m) => m.type === "delivery").length}
-                      </p>
-                      <div className="mt-2 pt-2 border-t border-border">
-                        <p className="text-xs font-medium mb-1">Thứ tự giao hàng:</p>
-                        <ol className="text-xs text-muted-foreground space-y-0.5 list-decimal list-inside">
-                          {pathResult.slice(1, -1).map((id, idx) => {
-                            const marker = markers.find((m) => m.id === id);
-                            return marker ? (
-                              <li key={id} className="truncate">
-                                {idx + 1}. {marker.name}
-                              </li>
-                            ) : null;
-                          })}
-                        </ol>
-                      </div>
-                    </div>
+                    <p className="text-sm font-medium">
+                      Tổng khoảng cách: {Array.from(pathDistance.values()).reduce((sum, dist) => sum + dist, 0).toFixed(2)} km
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Tổng số đơn hàng: {markers.filter((m) => m.type === "delivery").length} | 
+                      Số shipper: {pathResult.size}
+                    </p>
                   </Card>
                 </div>
               )}
@@ -1029,7 +1877,8 @@ export default function MapView() {
               <div className="text-xs text-muted-foreground space-y-1 pt-2">
                 <p>• Chọn loại điểm (Shipper/Giao hàng) trước khi tìm kiếm</p>
                 <p>• Thêm vị trí shipper và các điểm giao hàng</p>
-                <p>• Chạy thuật toán để tối ưu lịch trình giao hàng</p>
+                <p>• Nhập số lượng shipper và ngưỡng xung đột</p>
+                <p>• Chạy thuật toán tô màu đồ thị để phân chia đơn hàng</p>
               </div>
             </CardContent>
           </Card>
@@ -1063,40 +1912,90 @@ export default function MapView() {
                   : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               }
             />
-            {pathGeometry.length > 0 && (
-              <Polyline
-                positions={pathGeometry}
-                pathOptions={{
-                  color: "#22c55e",
-                  weight: 5,
-                  opacity: 0.9,
-                }}
-              />
-            )}
+            {Array.from(pathGeometry.entries()).map(([color, geometry]) => {
+              const colorHex = [
+                "#ef4444", "#3b82f6", "#22c55e", "#eab308", 
+                "#a855f7", "#f97316", "#ec4899", "#92400e", 
+                "#6b7280", "#000000"
+              ][color % 10];
+              
+              return (
+                <Polyline
+                  key={color}
+                  positions={geometry}
+                  pathOptions={{
+                    color: colorHex,
+                    weight: 5,
+                    opacity: 0.9,
+                  }}
+                />
+              );
+            })}
 
             {markers.map((marker) => {
-              const isInPath = pathResult.includes(marker.id);
-              const isShipper = marker.id === shipperLocation;
-              const pathIndex = pathResult.indexOf(marker.id);
+              const isShipper = marker.type === "shipper";
               let backgroundColor = "#ffffff";
               let borderColor = "#000000";
               let textColor = "#000000";
               let label = "";
               
               if (isShipper) {
-                backgroundColor = "#22c55e";
-                borderColor = "#16a34a";
-                textColor = "#ffffff";
-                label = "S";
-              } else if (isInPath && pathIndex > 0 && pathIndex < pathResult.length - 1) {
-                backgroundColor = "#3b82f6";
-                borderColor = "#2563eb";
-                textColor = "#ffffff";
-                label = String(pathIndex);
+                // Kiểm tra xem shipper này có được phân bổ đơn hàng không
+                let assignedColor = -1;
+                for (const [color, route] of pathResult.entries()) {
+                  if (route[0] === marker.id) {
+                    assignedColor = color;
+                    break;
+                  }
+                }
+                
+                if (assignedColor >= 0) {
+                  // Shipper được phân bổ - hiển thị màu tương ứng
+                  const colorHexArray = [
+                    "#ef4444", "#3b82f6", "#22c55e", "#eab308", 
+                    "#a855f7", "#f97316", "#ec4899", "#92400e", 
+                    "#6b7280", "#000000"
+                  ];
+                  backgroundColor = colorHexArray[assignedColor % colorHexArray.length];
+                  borderColor = backgroundColor;
+                  textColor = "#ffffff";
+                  label = `S${assignedColor + 1}`;
+                } else {
+                  // Shipper chưa được phân bổ
+                  backgroundColor = "#22c55e";
+                  borderColor = "#16a34a";
+                  textColor = "#ffffff";
+                  label = "S";
+                }
               } else if (marker.type === "delivery") {
-                backgroundColor = "#fbbf24";
-                borderColor = "#f59e0b";
-                textColor = "#000000";
+                // Tìm màu của shipper phụ trách đơn hàng này
+                let assignedColor = -1;
+                let pathIndex = -1;
+                
+                for (const [color, route] of pathResult.entries()) {
+                  const index = route.indexOf(marker.id);
+                  if (index > 0) {
+                    assignedColor = color;
+                    pathIndex = index - 1;
+                    break;
+                  }
+                }
+                
+                if (assignedColor >= 0) {
+                  const colorHex = [
+                    "#ef4444", "#3b82f6", "#22c55e", "#eab308", 
+                    "#a855f7", "#f97316", "#ec4899", "#92400e", 
+                    "#6b7280", "#000000"
+                  ][assignedColor % 10];
+                  backgroundColor = colorHex;
+                  borderColor = colorHex;
+                  textColor = "#ffffff";
+                  label = String(pathIndex + 1);
+                } else {
+                  backgroundColor = "#fbbf24";
+                  borderColor = "#f59e0b";
+                  textColor = "#000000";
+                }
               }
               
               const icon = L.divIcon({
