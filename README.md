@@ -1,55 +1,122 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ỨNG DỤNG TÔ MÀU ĐỒ THỊ ĐỂ SẮP XẾP LỊCH TRÌNH GIAO HÀNG TỐI ƯU CHO SHIPPER
 
-## Getting Started
+<div align="center">
 
-### Cấu hình API Key (Tùy chọn)
+![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)
+![React](https://img.shields.io/badge/React-19-cyan?style=flat-square&logo=react)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-CSS-38B2AC?style=flat-square&logo=tailwind-css)
+![MongoDB](https://img.shields.io/badge/MongoDB-7-green?style=flat-square&logo=mongodb)
+![WebAssembly](https://img.shields.io/badge/WebAssembly-C%2B%2B-FF6B6B?style=flat-square)
 
-Ứng dụng sử dụng 3 phương án để lấy đường đi:
-1. **OpenRouteService** (ưu tiên) - Cần API key miễn phí
-2. **OSRM** (dự phòng) - Public server, có thể chậm
-3. **Khoảng cách đường chim bay** (fallback) - Luôn hoạt động
+**Ứng dụng web tối ưu hóa lịch trình giao hàng sử dụng thuật toán đồ thị**
 
-Để sử dụng OpenRouteService (khuyến nghị):
-1. Đăng ký tài khoản miễn phí tại: https://openrouteservice.org/dev/#/signup
-2. Lấy API key từ dashboard
-3. Tạo file `.env.local` trong thư mục gốc:
-```env
-NEXT_PUBLIC_OPENROUTESERVICE_API_KEY=your_api_key_here
+[Live Demo](http://160.250.137.45:3300)
+
+</div>
+
+## Công nghệ sử dụng
+
+| Phần | Công nghệ |
+|------|-----------|
+| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS |
+| **UI Components** | ShadCN UI, Radix UI, Lucide Icons |
+| **Trực quan hóa** | React Flow, Recharts, Leaflet |
+| **Backend** | Next.js API Routes, Node.js |
+| **Database** | MongoDB + Mongoose |
+| **Thuật toán** | TypeScript + WebAssembly (C++/Emscripten) |
+| **Build Tools** | Webpack, Emscripten, PostCSS |
+
+---
+
+## Cài đặt Node.js
+
+### **Cách 1: Docker (Khuyến nghị cho Windows)**
+
+```bash
+docker pull node:24-alpine
+docker run -it --rm --entrypoint sh node:24-alpine
+node -v
+npm -v
+```
+---
+
+### **Cách 2: Installer Windows (.MSI)**
+
+Cài đặt **[Download Node.js v24.12.0 LTS](https://nodejs.org/dist/v24.12.0/node-v24.12.0-x64.msi)**
+
+1. Tải file `.msi`
+2. Chạy installer
+3. Follow the wizard
+4. Kiểm tra: `node -v` & `npm -v`
+
+---
+
+### **Cách 3: NVM cho Linux/macOS**
+
+```bash
+# Cài đặt NVM
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+
+# Load NVM
+\. "$HOME/.nvm/nvm.sh"
+
+# Cài Node.js phiên bản 24
+nvm install 24
+
+# Kiểm tra
+node -v
+npm -v
 ```
 
-Nếu không có API key, ứng dụng sẽ tự động dùng OSRM hoặc fallback về khoảng cách đường chim bay.
+---
 
-### Chạy ứng dụng
+## Hướng dẫn chạy
 
-First, run the development server:
+### 1. **Cài đặt dependencies**
+```bash
+npm install
+```
+
+### 2. **Build WebAssembly (nếu cần)**
+```bash
+# Build WASM tối ưu (production)
+npm run build:wasm
+
+# Build WASM nhanh (development)
+npm run build:wasm:fast
+```
+
+### 3. **Build & Chạy ứng dụng**
+```bash
+# Production build
+npm run build
+npm start
+
+# Development mode (hot reload)
+npm run dev
+```
+
+### 4. **Truy cập ứng dụng**
+Mở trình duyệt tại: **[http://localhost:3000](http://localhost:3000)**
+---
+
+##  Scripts có sẵn
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run build
+npm start
+npm run build:wasm
+npm run build:wasm:fast
+npm run lint
 ```
+---
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Cấu hình (Tùy chọn)
+### OpenRouteService API (cho bản đồ)
+```bash
+# Đăng ký: https://openrouteservice.org/dev/#/signup
+echo "NEXT_PUBLIC_OPENROUTESERVICE_API_KEY=your_api_key" >> .env.local
+```
+</div>

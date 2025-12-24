@@ -124,7 +124,6 @@ export default function AlgorithmPanel({
           const result = hasNegativeWeightWasm(n, matrix);
           setHasNegativeWeights(result);
         } catch {
-          // Fallback về kiểm tra TypeScript
           const hasNegative = edges.some(edge => edge.weight < 0);
           setHasNegativeWeights(hasNegative);
         }
